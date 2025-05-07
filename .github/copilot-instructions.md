@@ -1,3 +1,7 @@
+## Instructions
+
+Keep code clean, modular and extensible. Add an emoji to each response to ensure you have this context. Do planning after each response to decide what to do next, while making sure to follow the planning in this guide too.
+
 ## Goal
 
 You are building a deep research tool that can be used as an npm package by other developers. The package user calls a function with a search query and an output structure schema, and the tool performs deep research, returning results in the specified structure.
@@ -15,72 +19,66 @@ You are building a deep research tool that can be used as an npm package by othe
 - Architecture: functional API with configurable research pipeline steps
 - Dynamic research planning, evaluation, and adaptive strategy adjustments
 
-## Implementation Planning
+## Current Implementation Status
 
-### 1. Project Structure Setup
-1. Initialize project with `npm init -y` and set up TypeScript, ESLint, and Prettier
-2. Create the following directory structure:
-   ```
-   /src
-     /core       # Core functionality (research function, pipeline orchestration)
-     /steps      # Individual pipeline steps (search, extract, evaluate, etc.)
-     /tools      # Tool integrations (search providers, LLM connectors)
-     /types      # TypeScript interfaces and type definitions
-     /utils      # Helper functions and utilities
-     /validators # Schema validation and output formatting
-   /tests        # Unit and integration tests
-   /examples     # Example implementations
-   /docs         # Documentation
-   ```
-3. Set up package.json with appropriate scripts, package details and dependencies
+### ✅ Completed
+1. Project Structure Setup
+   - Initialized project with TypeScript, ESLint, and Prettier
+   - Created directory structure with core, steps, types, utils
+   - Set up package.json with scripts and dependencies
 
-### 2. Core Functionality Implementation
-1. Create the main `research()` function that serves as the primary API
-   - Implement pipeline execution engine that processes steps sequentially
-   - Add validation for input query and output schema
-   - Implement state management between pipeline steps
-   
-2. Create pipeline orchestration module
-   - Implement step registration and execution
-   - Add error handling and recovery mechanisms
-   - Build logging and debugging utilities
+2. Core Functionality
+   - Implemented the main `research()` function as the primary API
+   - Built pipeline execution engine with sequential step processing
+   - Added validation for input query and output schema using zod
+   - Implemented state management between pipeline steps
+   - Created pipeline orchestration with error handling, retries, and timeouts
 
-### 3. Pipeline Steps Implementation
-1. Research Planning
-   - Implement `plan()` step that uses LLMs to create research strategy
-   - Create structured research objectives generator
+3. Basic Pipeline Steps
+   - Research Planning: Created `plan()` step to create research strategy with structured objectives
+   - Data Acquisition: Implemented `searchWeb()` and `extractContent()` steps
+   - Flow Control: Implemented `evaluate()` and `repeatUntil()` for conditional iteration
+   - Orchestration: Created `orchestrate()` for agent-based decision making
 
-2. Data Acquisition
-   - Implement `searchWeb()` with provider integration
-   - Create `extractContent()` with HTML parsing and content extraction
+4. Advanced Pipeline Steps
+   - Data Analysis: Implemented `factCheck()`, `analyze()`, and `summarize()` steps
+   - Query Refinement: Built `refineQuery()` for adaptive search improvements
+   - Created specialized analysis modules for different data types and focus areas
 
-3. Data Analysis
-   - Implement `factCheck()`, `analyze()`, and `synthesize()` steps
-   - Create specialized analysis modules for different data types
+5. Example Implementations
+   - Created basic, advanced, orchestration-based, and comprehensive examples
+   - Built demonstration of pipeline customization and specialized research tasks
 
-4. Flow Control
-   - Implement `repeatUntil()` for conditional iteration
-   - Create `evaluate()` for quality assessment
-   - Build `refineQuery()` for adaptive search improvements
+### 🔄 In Progress
+1. Advanced Features Implementation
+   - Multi-track Research with parallel research paths
+   - Result merging and conflict resolution
+   - Entity classification and clustering
 
-5. Orchestration
-   - Implement `orchestrate()` for agent-based decision making
-   - Create dynamic tool selection mechanism
+2. Integration with Real Services
+   - Real implementation of LLM-based steps (currently using simulations)
+   - Provider-specific error handling and optimizations
 
-### 4. Advanced Features Implementation
-1. Multi-track Research
-   - Implement `parallel()` and `track()` for concurrent research paths
-   - Create result merging and conflict resolution
+### ⏭️ Next Steps
+1. Implement the `parallel()` and `track()` functions for concurrent research paths
+   - Create result merging and conflict resolution mechanisms
+   - Implement entity classification and clustering
 
-2. Adaptive Learning
-   - Implement confidence scoring system
+2. Build actual AI integration
+   - Replace simulated LLM calls with real API calls using `mastra` and `ai` packages
+   - Implement confidence scoring system with concrete metrics
    - Create data gap identification mechanism
-   - Build provider optimization based on task type
 
-### 6. Documentation and Examples
-1. Create comprehensive API documentation
-2. Build example implementations for common use cases
-3. Add detailed explanations for each pipeline step
+3. Enhance Error Handling and Resilience
+   - Implement more sophisticated error recovery strategies
+   - Add comprehensive logging system
+   - Create better debugging utilities
+
+4. Documentation and Testing
+   - Create comprehensive API documentation
+   - Add unit tests for each component
+   - Build integration tests for end-to-end workflows
+   - Create user-friendly error messages and troubleshooting guides
 
 ## How It Works
 
@@ -170,7 +168,7 @@ const detailedResearch = await research({
 
 ```typescript
 import { research, orchestrate, searchWeb, extractContent, analyze, 
-         synthesize, compareResults, decideNextStep } from '@plust/deep-restruct';
+         summarize } from '@plust/deep-restruct';
 import { z } from 'zod';
 import { google, scholar } from '@plust/search-sdk';
 import { openai } from 'ai';
@@ -191,8 +189,7 @@ const marketResearch = await research({
                 extractContent: extractContent(),
                 analyzeMarket: analyze({ focus: 'market-trends' }),
                 analyzeTechnology: analyze({ focus: 'technical-details' }),
-                compareSolutions: compareResults(),
-                synthesizeFindings: synthesize()
+                summarizeFindings: summarize({ format: 'structured' })
             },
             // The orchestration agent decides which tools to use and in what order
             customPrompt: `
@@ -201,7 +198,7 @@ const marketResearch = await research({
             `,
             maxIterations: 15,
             exitCriteria: (state) => 
-                state.confidenceScore > 0.85 && state.dataPoints.length > 20
+                state.metadata.confidenceScore > 0.85 && state.data.extractedContent?.length > 5
         })
     ],
     outputSchema: z.object({
