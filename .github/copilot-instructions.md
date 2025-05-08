@@ -58,6 +58,8 @@ import { research, plan, searchWeb, extractContent, factCheck,
          repeatUntil, evaluate, refineQuery, summarize } from '@plust/deep-restruct';
 import { z } from 'zod';
 import { google } from '@plust/search-sdk';
+import { openai } from '@ai-sdk/openai';
+
 
 const googleSearch = google.configure({
     apiKey: process.env.GOOGLE_API_KEY,
@@ -67,7 +69,7 @@ const googleSearch = google.configure({
 const detailedResearch = await research({
     query: "Impact of climate change on agriculture",
     steps: [
-        plan(),
+        plan({ llm: openai('gpt-4o') }),
         searchWeb({ provider: googleSearch, maxResults: 10 }),
         extractContent({ selector: 'article, .content, main' }),
         factCheck({ threshold: 0.8 }),
@@ -170,3 +172,19 @@ const parallelResearch = await research({
 10. Handle `ResearchState` metadata properly
 11. Check optional properties before access
 12. Use type guards for dynamic data
+
+## Vercel AI SDK Docs
+
+Short example of using the AI SDK for reference:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-4o'),
+  system: 'You are a helpful assistant.',
+  prompt: 'Explain quantum entanglement.',
+});
+console.log(text);
+```
