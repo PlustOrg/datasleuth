@@ -17,6 +17,12 @@ export { factCheck } from './steps/factCheck';
 export { summarize } from './steps/summarize';
 export { refineQuery } from './steps/refineQuery';
 export { analyze } from './steps/analyze';
+export { track } from './steps/track';
+export { parallel, defaultMergeFunction } from './steps/parallel';
+export { classify } from './steps/classify';
+
+// Utilities
+export { ResultMerger } from './utils/merge';
 
 // Types
 export type { 
@@ -68,3 +74,23 @@ export type {
   AnalyzeOptions,
   AnalysisResult
 } from './steps/analyze';
+
+export type {
+  TrackOptions,
+  TrackResult
+} from './steps/track';
+
+export type {
+  ParallelOptions
+} from './steps/parallel';
+
+export type {
+  ConflictResolutionOptions
+} from './utils/merge';
+
+export type {
+  ClassifyOptions,
+  Entity,
+  Cluster,
+  ClassificationResult
+} from './steps/classify';

@@ -1,3 +1,5 @@
+# @plust/deep-restruct Development Guide
+
 ## Instructions
 
 Keep code clean, modular and extensible. Add an emoji to each response to ensure you have this context. Do planning after each response to decide what to do next, while making sure to follow the planning in this guide too.
@@ -49,32 +51,29 @@ You are building a deep research tool that can be used as an npm package by othe
    - Created basic, advanced, orchestration-based, and comprehensive examples
    - Built demonstration of pipeline customization and specialized research tasks
 
-### 🔄 In Progress
-1. Advanced Features Implementation
-   - Multi-track Research with parallel research paths
-   - Result merging and conflict resolution
-   - Entity classification and clustering
+6. Advanced Features Implementation
+   - Multi-track Research: Implemented `track()` function for isolated research paths
+   - Parallel Execution: Created `parallel()` function for concurrent execution of tracks
+   - Result Merging: Built conflict resolution mechanism with configurable strategies
+   - Entity Classification: Implemented entity classification and clustering
 
-2. Integration with Real Services
+### 🔄 In Progress
+1. Integration with Real Services
    - Real implementation of LLM-based steps (currently using simulations)
    - Provider-specific error handling and optimizations
 
 ### ⏭️ Next Steps
-1. Implement the `parallel()` and `track()` functions for concurrent research paths
-   - Create result merging and conflict resolution mechanisms
-   - Implement entity classification and clustering
-
-2. Build actual AI integration
+1. Build actual AI integration
    - Replace simulated LLM calls with real API calls using `mastra` and `ai` packages
    - Implement confidence scoring system with concrete metrics
    - Create data gap identification mechanism
 
-3. Enhance Error Handling and Resilience
+2. Enhance Error Handling and Resilience
    - Implement more sophisticated error recovery strategies
    - Add comprehensive logging system
    - Create better debugging utilities
 
-4. Documentation and Testing
+3. Documentation and Testing
    - Create comprehensive API documentation
    - Add unit tests for each component
    - Build integration tests for end-to-end workflows
@@ -89,6 +88,9 @@ The deep research tool uses a modular pipeline approach with configurable steps 
 - Refine queries based on found data
 - Execute specialized domain-specific analysis
 - Make pivoting decisions and iterate until quality thresholds are met
+- Run multiple research tracks in parallel
+- Merge results from different tracks with conflict resolution
+- Classify and cluster entities in the research data
 
 Users interact with a simple functional API (`research()`) and can configure research steps, tools, LLM providers, search APIs, and attach custom tools. Under the hood, the package uses specialized AI agents managed internally, but users don't need to work directly with agent architecture.
 
@@ -225,25 +227,150 @@ const marketResearch = await research({
 });
 ```
 
-### Advanced Features (Implementation Guide)
+### Parallel Research Example
 
-The package should support:
+```typescript
+import { research, track, parallel, searchWeb, extractContent, analyze, 
+         classify, summarize, ResultMerger } from '@plust/deep-restruct';
+import { z } from 'zod';
+import { google, bing } from '@plust/search-sdk';
+
+// Configure search providers
+const googleSearch = google.configure({ apiKey: process.env.GOOGLE_API_KEY });
+const bingSearch = bing.configure({ apiKey: process.env.BING_API_KEY });
+
+const parallelResearch = await research({
+    query: "Quantum computing applications in healthcare",
+    steps: [
+        // Run multiple research tracks in parallel
+        parallel({
+            tracks: [
+                // Technical research track
+                track({
+                    name: 'technical',
+                    steps: [
+                        searchWeb({ 
+                            provider: googleSearch, 
+                            query: "quantum computing technical applications healthcare" 
+                        }),
+                        extractContent(),
+                        analyze({ focus: 'technical-details' })
+                    ]
+                }),
+                // Clinical research track
+                track({
+                    name: 'clinical',
+                    steps: [
+                        searchWeb({ 
+                            provider: bingSearch, 
+                            query: "quantum computing clinical healthcare applications" 
+                        }),
+                        extractContent(),
+                        analyze({ focus: 'clinical-applications' })
+                    ]
+                }),
+                // Business/market research track
+                track({
+                    name: 'business',
+                    steps: [
+                        searchWeb({ 
+                            provider: googleSearch, 
+                            query: "quantum computing healthcare market business impact" 
+                        }),
+                        extractContent(),
+                        analyze({ focus: 'market-trends' })
+                    ]
+                })
+            ],
+            // Configure how results from different tracks are merged
+            mergeFunction: ResultMerger.createMergeFunction({
+                strategy: 'weighted', 
+                weights: { 
+                    technical: 1.5, 
+                    clinical: 1.8, 
+                    business: 1.0 
+                },
+                conflictResolution: 'mostConfident'
+            }),
+            timeout: 120000, // 2 minutes timeout
+            continueOnError: true
+        }),
+        // Classify and cluster entities in the merged results
+        classify({
+            classifyEntities: true,
+            clusterSimilarEntities: true,
+            taxonomyLevels: 3,
+            confidenceThreshold: 0.7
+        }),
+        // Final summarization of all tracks
+        summarize({ 
+            format: 'structured',
+            maxLength: 2000
+        })
+    ],
+    outputSchema: z.object({
+        summary: z.string(),
+        applications: z.array(z.object({
+            name: z.string(),
+            domain: z.enum(['drug-discovery', 'diagnostics', 'personalized-medicine', 'other']),
+            maturityLevel: z.enum(['theoretical', 'research', 'experimental', 'commercial']),
+            technicalComplexity: z.number().min(1).max(10),
+            clinicalImpact: z.number().min(1).max(10),
+            marketPotential: z.number().min(1).max(10)
+        })),
+        entities: z.array(z.object({
+            name: z.string(),
+            type: z.enum(['technology', 'company', 'research-organization', 'application']),
+            connections: z.array(z.string())
+        })),
+        timeframe: z.object({
+            shortTerm: z.string(),
+            mediumTerm: z.string(),
+            longTerm: z.string()
+        }),
+        sources: z.array(z.object({
+            url: z.string().url(),
+            trackOrigin: z.enum(['technical', 'clinical', 'business', 'merged']),
+            reliability: z.number().min(0).max(1)
+        }))
+    })
+});
+```
+
+## Implementation Guide
+
+### Advanced Features
 
 1. **Custom Tools Integration**
      - Allow custom tools via `mastra.createTool()`
      - Support for custom LLM providers through the `ai` SDK
 
 2. **Pipeline Configuration**
-     - Implement specialized research steps (search, analysis, fact-check, summarize)
-     - Support dynamic research strategies with evaluation criteria
-     - Allow phase-based research with configurable thresholds
+     - Specialized research steps (search, analysis, fact-check, summarize)
+     - Dynamic research strategies with evaluation criteria
+     - Phase-based research with configurable thresholds
 
 3. **Multi-track Research**
-     - Support parallel research tracks with `parallel()` and `track()`
-     - Allow merging results from different tracks
-     - Implement entity classification, clustering, and prioritization
+     - Parallel research tracks with `parallel()` and `track()`
+     - Result merging with conflict resolution strategies including:
+        - `first` - Take the first non-null value found
+        - `last` - Take the last non-null value found
+        - `majority` - Use the value most commonly returned
+        - `weighted` - Apply weights to different tracks
+        - `mostConfident` - Use the value with highest confidence
+        - `custom` - Use a user-provided merge function
+     - Entity classification, clustering, and prioritization
 
 4. **Adaptive Learning**
      - Support for multiple LLM providers optimized for different tasks
-     - Implement confidence scoring and data gap identification
-     - Support regional focus and specialized content extraction
+     - Confidence scoring and data gap identification
+     - Regional focus and specialized content extraction
+
+## Design Principles
+
+1. **Modularity**: Each step in the pipeline should be independent and composable
+2. **Extensibility**: Users should be able to add custom steps and tools
+3. **Transparency**: Research process should be traceable and explainable
+4. **Resilience**: Should handle errors gracefully with retries and fallbacks
+5. **Configurability**: Users should be able to fine-tune the research process
+6. **Type Safety**: All inputs and outputs should be properly typed and validated
