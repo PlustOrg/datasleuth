@@ -35,6 +35,42 @@ Build a deep research tool as an npm package. Users provide a search query and o
 ## How It Works
 Uses modular pipeline with configurable steps to plan research, search web, extract content, evaluate results, refine queries, analyze data, run parallel tracks, and merge findings. Users interact through a simple `research()` API.
 
+## Development Plan
+
+Based on the current project status, here's the implementation plan:
+
+### 1. Type System Improvements
+- Replace all `any` type usages with proper type definitions
+- Add stricter type checking for pipeline steps and their inputs/outputs
+- Create more specific interfaces for different research data structures
+- Add proper generics for schema validation in the research pipeline
+- Define comprehensive type guards for runtime type checking
+
+### 2. LLM Integration
+- Implement real LLM integrations in plan.ts, analyze.ts, and other AI-dependent steps
+- Create proper abstractions for different LLM providers using the Vercel AI SDK
+- Add configurable LLM options (model, temperature, etc.) to relevant steps
+- Create utility functions for consistent prompt construction
+
+### 3. Error Handling Enhancements
+- Create specialized error classes that implement ResearchError
+- Implement consistent error handling patterns across all steps
+- Add retry mechanisms for external API calls (search, LLM, etc.)
+- Provide detailed error messages and suggestions for recovery
+- Add proper logging at different verbosity levels
+
+### 4. Testing Framework
+- Create unit tests for individual steps
+- Develop integration tests for the full pipeline
+- Implement mock providers for testing
+- Create test fixtures for common research scenarios
+
+### 5. Documentation
+- Enhance JSDoc comments throughout the codebase
+- Create usage examples with real-world scenarios
+- Add troubleshooting guides and best practices
+- Document all available options and configurations
+
 ## Use-Case Examples
 
 ### Basic Research
