@@ -2,7 +2,7 @@
  * Analysis step for the research pipeline
  * Extracts insights on specific topics or aspects from collected data
  */
-import { mastra } from 'mastra';
+import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
@@ -83,13 +83,13 @@ async function executeAnalyzeStep(
   
   // Add extracted content if available
   if (state.data.extractedContent) {
-    contentToAnalyze.push(...state.data.extractedContent.map(item => item.content));
+    contentToAnalyze.push(...state.data.extractedContent.map((item: any) => item.content));
   }
   
   // Add factual information if available (only valid facts)
   if (state.data.factChecks) {
-    const validFactChecks = state.data.factChecks.filter(check => check.isValid);
-    contentToAnalyze.push(...validFactChecks.map(check => check.statement));
+    const validFactChecks = state.data.factChecks.filter((check: any) => check.isValid);
+    contentToAnalyze.push(...validFactChecks.map((check: any) => check.statement));
   }
   
   if (contentToAnalyze.length === 0) {
@@ -269,5 +269,11 @@ async function simulateAnalysis(
  * @returns An analysis step for the research pipeline
  */
 export function analyze(options: AnalyzeOptions): ReturnType<typeof createStep> {
-  return createStep('Analyze', executeAnalyzeStep, options);
+  return createStep('Analyze', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeAnalyzeStep(state, options);
+    }, 
+    options
+  );
 }

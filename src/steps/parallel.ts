@@ -3,7 +3,7 @@
  * Enables concurrent research paths for more efficient deep research
  */
 import { createStep } from '../utils/steps';
-import { ResearchState, ResearchStep } from '../types/pipeline';
+import { ResearchState, ResearchStep, ResearchError } from '../types/pipeline';
 import { TrackResult } from './track';
 
 /**
@@ -20,6 +20,21 @@ export interface ParallelOptions {
   mergeFunction?: (tracks: Record<string, TrackResult>, state: ResearchState) => any;
   /** Whether to include the merged result in the results array */
   includeInResults?: boolean;
+}
+
+/**
+ * Custom error with additional research properties
+ */
+export class ParallelResearchError extends Error implements ResearchError {
+  step: string;
+  code: string;
+  
+  constructor(message: string, step: string, code: string) {
+    super(message);
+    this.name = 'ParallelResearchError';
+    this.step = step;
+    this.code = code;
+  }
 }
 
 /**
@@ -61,11 +76,11 @@ async function executeParallelStep(
           ...state,
           errors: [
             ...state.errors,
-            {
-              message: error instanceof Error ? error.message : String(error),
-              step: track.name || 'unknown',
-              code: 'PARALLEL_EXECUTION_ERROR'
-            }
+            new ParallelResearchError(
+              error instanceof Error ? error.message : String(error),
+              track.name || 'unknown',
+              'PARALLEL_EXECUTION_ERROR'
+            )
           ]
         };
       } else {
@@ -79,7 +94,7 @@ async function executeParallelStep(
     const trackStates = await Promise.race([
       Promise.all(trackPromises),
       timeoutPromise
-    ]);
+    ]) as ResearchState[];
     
     // Collect all track results and merge them
     const trackResults: Record<string, TrackResult> = {};
@@ -88,7 +103,7 @@ async function executeParallelStep(
     let allErrors = [...state.errors];
     
     // Extract track results from each state
-    trackStates.forEach((trackState) => {
+    trackStates.forEach((trackState: ResearchState) => {
       // Merge errors
       allErrors = [...allErrors, ...trackState.errors];
       
@@ -127,11 +142,13 @@ async function executeParallelStep(
         }
       } catch (error) {
         console.error('Error in parallel merge function:', error);
-        allErrors.push({
-          message: error instanceof Error ? error.message : String(error),
-          step: 'ParallelMerge',
-          code: 'PARALLEL_MERGE_ERROR'
-        });
+        allErrors.push(
+          new ParallelResearchError(
+            error instanceof Error ? error.message : String(error),
+            'ParallelMerge',
+            'PARALLEL_MERGE_ERROR'
+          )
+        );
       }
     }
     
@@ -145,7 +162,7 @@ async function executeParallelStep(
       errors: allErrors,
       metadata: {
         ...state.metadata,
-        parallelTracks: Object.keys(trackResults).length,
+        parallelTracks: { count: Object.keys(trackResults).length } as Record<string, any>,
         parallelCompletedAt: new Date().toISOString()
       }
     };
@@ -156,15 +173,15 @@ async function executeParallelStep(
       ...state,
       errors: [
         ...state.errors,
-        {
-          message: error instanceof Error ? error.message : String(error),
-          step: 'Parallel',
-          code: 'PARALLEL_EXECUTION_ERROR'
-        }
+        new ParallelResearchError(
+          error instanceof Error ? error.message : String(error),
+          'Parallel',
+          'PARALLEL_EXECUTION_ERROR'
+        )
       ],
       metadata: {
         ...state.metadata,
-        parallelError: error instanceof Error ? error.message : String(error)
+        parallelError: error instanceof Error ? error : new Error(String(error))
       }
     };
   }
@@ -177,7 +194,13 @@ async function executeParallelStep(
  * @returns A research step that executes tracks in parallel
  */
 export function parallel(options: ParallelOptions): ReturnType<typeof createStep> {
-  return createStep('Parallel', executeParallelStep, options);
+  return createStep('Parallel', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeParallelStep(state, options);
+    }, 
+    options
+  );
 }
 
 /**

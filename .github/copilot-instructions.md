@@ -374,3 +374,98 @@ const parallelResearch = await research({
 4. **Resilience**: Should handle errors gracefully with retries and fallbacks
 5. **Configurability**: Users should be able to fine-tune the research process
 6. **Type Safety**: All inputs and outputs should be properly typed and validated
+
+## TypeScript Best Practices to Avoid Common Errors
+
+1. **Importing the `mastra` Library**
+   - Always use `import * as mastra from 'mastra'` instead of `import { mastra } from 'mastra'`
+   - The library exports a namespace, not a named export called "mastra"
+
+2. **Step Function Pattern**
+   - Use the wrapper function pattern for all step creation functions:
+   ```typescript
+   export function myStep(options: MyStepOptions): ReturnType<typeof createStep> {
+     return createStep('MyStep', 
+       // Wrapper function that matches the expected signature
+       async (state: ResearchState, opts?: Record<string, any>) => {
+         return executeMyStep(state, options);
+       }, 
+       options
+     );
+   }
+   ```
+
+3. **State Metadata Properties**
+   - Always access properties via `state.metadata[propertyName]`
+   - For custom metadata properties, remember that we support an index signature
+   - When preserving structure after executing tools or steps, always copy back important properties
+
+4. **Error Handling**
+   - Use the `ResearchError` interface or extend `Error` when creating custom errors
+   - Always include `name`, `message`, `step`, and `code` properties
+   - Use `ParallelResearchError` when handling errors in parallel execution
+
+5. **Property Names Consistency**
+   - Use `selectors` (not `selector`) in `ExtractContentOptions`
+   - The `query` property in `WebSearchOptions` is for custom query overrides
+   - Remember that `additionalInstructions` is supported in `SummarizeOptions`
+
+6. **Working with Array Types**
+   - Always explicitly type arrays with element types, e.g., `[] as OrchestrationIteration[]`
+   - Use type assertions for map/filter operations on data from flexible state objects
+   - When iterating through arrays with unknown types, add proper type annotations
+
+7. **Preserving State Structure**
+   - When merging state after tool execution in complex steps like `orchestrate`:
+   ```typescript
+   currentState = {
+     ...nextState,
+     data: {
+       ...nextState.data,
+       orchestration: currentState.data.orchestration
+     }
+   };
+   ```
+
+8. **Custom Error Classes**
+   - Create proper custom error classes that implement `ResearchError`:
+   ```typescript
+   export class MyCustomError extends Error implements ResearchError {
+     step: string;
+     code: string;
+     
+     constructor(message: string, step: string, code: string) {
+       super(message);
+       this.name = 'MyCustomError';
+       this.step = step;
+       this.code = code;
+     }
+   }
+   ```
+
+9. **Type Annotations for Callbacks**
+   - Always add explicit type annotations for callback parameters:
+   ```typescript
+   someArray.map((item: MyType) => item.property)
+   ```
+
+10. **ResearchState Metadata Handling**
+    - Remember that the `metadata` object in `ResearchState` has an index signature
+    - You can add custom properties directly, but keep them documented
+    - For TypeScript type safety, add properties to the interface if they'll be used across files
+
+11. **Working with Optional Properties**
+    - Always check for existence before accessing properties:
+    ```typescript
+    if (state.data.someProperty) {
+      // Now safe to use state.data.someProperty
+    }
+    ```
+
+12. **Type Guards for Dynamic Data**
+    - Use type guards when working with dynamically typed properties:
+    ```typescript
+    if (typeof data === 'object' && data !== null && 'property' in data) {
+      // Now TypeScript knows data has a property called 'property'
+    }
+    ```

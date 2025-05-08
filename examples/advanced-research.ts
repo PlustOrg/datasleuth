@@ -63,14 +63,14 @@ async function advancedResearch() {
         
         // Extract content from the search results
         extractContent({ 
-          selector: 'article, .content, main' 
+          selectors: 'article, .content, main' 
         }),
         
         // Repeat until we have enough sources
         repeatUntil(
           evaluate({ 
-            criteriaFn: (data) => 
-              (data.searchResults?.length || 0) > 5 
+            criteriaFn: (state) => 
+              (state.data.searchResults?.length || 0) > 5 
           }),
           [
             // If we don't have enough sources, search again with refined query

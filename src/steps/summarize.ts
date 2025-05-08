@@ -2,7 +2,7 @@
  * Summarization step for the research pipeline
  * Synthesizes information into concise summaries using LLMs
  */
-import { mastra } from 'mastra';
+import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
@@ -27,6 +27,8 @@ export interface SummarizeOptions {
   includeInResults?: boolean;
   /** Custom prompt for summary generation */
   customPrompt?: string;
+  /** Additional instructions for summary generation */
+  additionalInstructions?: string;
 }
 
 /**
@@ -61,6 +63,7 @@ async function executeSummarizeStep(
     includeCitations = true,
     includeInResults = true,
     customPrompt,
+    additionalInstructions,
   } = options;
 
   // Get content to summarize
@@ -68,7 +71,7 @@ async function executeSummarizeStep(
   
   // Add extracted content if available
   if (state.data.extractedContent) {
-    contentToSummarize.push(...state.data.extractedContent.map(item => item.content));
+    contentToSummarize.push(...state.data.extractedContent.map((item: any) => item.content));
   }
   
   // Add research plan if available
@@ -78,8 +81,8 @@ async function executeSummarizeStep(
   
   // Add factual information if available
   if (state.data.factChecks) {
-    const validFactChecks = state.data.factChecks.filter(check => check.isValid);
-    contentToSummarize.push(...validFactChecks.map(check => check.statement));
+    const validFactChecks = state.data.factChecks.filter((check: any) => check.isValid);
+    contentToSummarize.push(...validFactChecks.map((check: any) => check.statement));
   }
   
   if (contentToSummarize.length === 0) {
@@ -97,7 +100,8 @@ async function executeSummarizeStep(
     maxLength,
     format,
     focus,
-    includeCitations
+    includeCitations,
+    additionalInstructions
   );
   
   // Update state with summary
@@ -133,7 +137,8 @@ async function simulateSummaryGeneration(
   maxLength: number,
   format: string,
   focus: string[],
-  includeCitations: boolean
+  includeCitations: boolean,
+  additionalInstructions?: string
 ): Promise<string> {
   // Simulate a delay as if we're calling an LLM
   await new Promise(resolve => setTimeout(resolve, 1500));
@@ -155,6 +160,11 @@ async function simulateSummaryGeneration(
     `Analysis of available data reveals patterns related to ${query} that merit attention. `,
     `The evolution of ${query} demonstrates both challenges and opportunities for stakeholders. `,
   ];
+  
+  // Add additional instructions-based content if provided
+  if (additionalInstructions) {
+    summary += `\nFollowing specific analysis directives: ${additionalInstructions.substring(0, 100)}... `;
+  }
   
   // Add focus-specific content if specified
   if (focus.length > 0) {
@@ -229,5 +239,11 @@ async function simulateSummaryGeneration(
  * @returns A summarization step for the research pipeline
  */
 export function summarize(options: SummarizeOptions = {}): ReturnType<typeof createStep> {
-  return createStep('Summarize', executeSummarizeStep, options);
+  return createStep('Summarize', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeSummarizeStep(state, options);
+    }, 
+    options
+  );
 }

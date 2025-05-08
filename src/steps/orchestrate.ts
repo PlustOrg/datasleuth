@@ -2,7 +2,7 @@
  * Orchestration step for the research pipeline
  * Uses mastra agents to make decisions about which tools to use
  */
-import { mastra } from 'mastra';
+import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState, ResearchStep } from '../types/pipeline';
 
@@ -22,6 +22,16 @@ export interface OrchestrateOptions {
   exitCriteria?: (state: ResearchState) => boolean | Promise<boolean>;
   /** Whether to include the orchestration results in the final output */
   includeInResults?: boolean;
+}
+
+/**
+ * Iteration record for orchestration
+ */
+export interface OrchestrationIteration {
+  iteration: number;
+  toolChosen: string;
+  reasoning: string;
+  timestamp: string;
 }
 
 /**
@@ -72,7 +82,7 @@ async function executeOrchestrationStep(
       ...state.data,
       orchestration: {
         availableTools: Object.keys(tools),
-        iterations: [],
+        iterations: [] as OrchestrationIteration[],
       },
     },
   };
@@ -103,7 +113,18 @@ async function executeOrchestrationStep(
 
     // Execute the chosen tool
     console.log(`Executing tool: ${chosenToolKey}`);
-    currentState = await chosenTool.execute(currentState);
+    const nextState = await chosenTool.execute(currentState);
+    
+    // Preserve our orchestration data structure
+    currentState = {
+      ...nextState,
+      data: {
+        ...nextState.data,
+        orchestration: {
+          ...currentState.data.orchestration,
+        }
+      }
+    };
 
     // Check exit criteria if provided
     if (exitCriteria && await exitCriteria(currentState)) {
@@ -137,5 +158,11 @@ async function executeOrchestrationStep(
  * @returns An orchestration step for the research pipeline
  */
 export function orchestrate(options: OrchestrateOptions): ReturnType<typeof createStep> {
-  return createStep('Orchestration', executeOrchestrationStep, options);
+  return createStep('Orchestration', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeOrchestrationStep(state, options);
+    },
+    options
+  );
 }

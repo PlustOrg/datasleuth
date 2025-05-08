@@ -2,7 +2,7 @@
  * Query refinement step for the research pipeline
  * Improves search queries based on previous findings
  */
-import { mastra } from 'mastra';
+import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
@@ -191,5 +191,11 @@ async function simulateQueryRefinement(
  * @returns A query refinement step for the research pipeline
  */
 export function refineQuery(options: RefineQueryOptions = {}): ReturnType<typeof createStep> {
-  return createStep('RefineQuery', executeRefineQueryStep, options);
+  return createStep('RefineQuery', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeRefineQueryStep(state, options);
+    }, 
+    options
+  );
 }

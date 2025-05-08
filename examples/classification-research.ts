@@ -48,7 +48,7 @@ async function runClassificationExample() {
   console.log('Starting research with entity classification...');
   
   try {
-    const results = await research({
+    const results: any = await research({
       query: "Space exploration achievements in the last decade",
       outputSchema: classifiedResearchSchema,
       steps: [
@@ -94,25 +94,25 @@ async function runClassificationExample() {
     console.log('Research with classification completed successfully!');
     
     // Display the classified entities
-    if (results.classification && results.classification.entities) {
-      console.log(`\nFound ${Object.keys(results.classification.entities).length} entities`);
+    if (results.data && results.data.classification && results.data.classification.entities) {
+      console.log(`\nFound ${Object.keys(results.data.classification.entities).length} entities`);
       
-      const topEntities = Object.values(results.classification.entities)
-        .sort((a, b) => b.confidence - a.confidence)
+      const topEntities = Object.values(results.data.classification.entities)
+        .sort((a: any, b: any) => b.confidence - a.confidence)
         .slice(0, 5);
       
       console.log('\nTop 5 Entities:');
-      topEntities.forEach(entity => {
+      topEntities.forEach((entity: any) => {
         console.log(`- ${entity.name} (${entity.type}): confidence ${entity.confidence.toFixed(2)}`);
       });
     }
     
     // Display the entity clusters
-    if (results.classification && results.classification.clusters) {
-      console.log(`\nFound ${Object.keys(results.classification.clusters).length} clusters`);
+    if (results.data && results.data.classification && results.data.classification.clusters) {
+      console.log(`\nFound ${Object.keys(results.data.classification.clusters).length} clusters`);
       
       console.log('\nEntity Clusters:');
-      Object.values(results.classification.clusters).forEach(cluster => {
+      Object.values(results.data.classification.clusters).forEach((cluster: any) => {
         console.log(`- ${cluster.name} (${cluster.entities.length} entities)`);
       });
     }

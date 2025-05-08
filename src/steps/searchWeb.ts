@@ -27,6 +27,8 @@ export type SearchResult = z.infer<typeof searchResultSchema>;
 export interface WebSearchOptions {
   /** Search provider configured from @plust/search-sdk */
   provider: any;
+  /** Optional custom query override (if not provided, will use the main research query) */
+  query?: string;
   /** Maximum number of results to return */
   maxResults?: number;
   /** Language code for results (e.g., 'en') */
@@ -52,6 +54,7 @@ async function executeWebSearchStep(
 ): Promise<ResearchState> {
   const {
     provider,
+    query: customQuery,
     maxResults = 10,
     language,
     region,
@@ -62,7 +65,7 @@ async function executeWebSearchStep(
   } = options;
 
   // Determine which queries to use
-  let queries: string[] = [state.query];
+  let queries: string[] = [customQuery || state.query];
   
   // Use queries from research plan if available and option is enabled
   if (useQueriesFromPlan && state.data.researchPlan?.searchQueries) {
@@ -133,5 +136,11 @@ async function executeWebSearchStep(
  * @returns A web search step for the research pipeline
  */
 export function searchWeb(options: WebSearchOptions): ReturnType<typeof createStep> {
-  return createStep('WebSearch', executeWebSearchStep, options);
+  return createStep('WebSearch', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeWebSearchStep(state, options);
+    }, 
+    options
+  );
 }

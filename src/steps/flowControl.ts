@@ -68,10 +68,19 @@ async function executeEvaluateStep(
 }
 
 /**
- * Creates a conditional evaluation step
+ * Creates an evaluation step for the research pipeline
+ * 
+ * @param options Configuration options for evaluation
+ * @returns An evaluation step for the research pipeline
  */
 export function evaluate(options: EvaluateOptions): ReturnType<typeof createStep> {
-  return createStep('Evaluate', executeEvaluateStep, options);
+  return createStep('Evaluate', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeEvaluateStep(state, options);
+    }, 
+    options
+  );
 }
 
 /**

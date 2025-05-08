@@ -2,7 +2,7 @@
  * Fact-checking step for the research pipeline
  * Validates information using LLMs and external sources
  */
-import { mastra } from 'mastra';
+import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
@@ -237,5 +237,11 @@ async function simulateFactChecking(
  * @returns A fact checking step for the research pipeline
  */
 export function factCheck(options: FactCheckOptions = {}): ReturnType<typeof createStep> {
-  return createStep('FactCheck', executeFactCheckStep, options);
+  return createStep('FactCheck', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeFactCheckStep(state, options);
+    }, 
+    options
+  );
 }

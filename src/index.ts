@@ -91,6 +91,6 @@ export type {
 export type {
   ClassifyOptions,
   Entity,
-  Cluster,
-  ClassificationResult
+  EntityCluster as Cluster,
+  ClassificationData as ClassificationResult
 } from './steps/classify';

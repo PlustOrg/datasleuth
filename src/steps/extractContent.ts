@@ -11,6 +11,8 @@ import { ResearchState } from '../types/pipeline';
 export interface ExtractContentOptions {
   /** CSS selectors to extract content from */
   selectors?: string;
+  /** Alias for selectors (for backwards compatibility) */
+  selector?: string;
   /** Maximum number of URLs to process */
   maxUrls?: number;
   /** Maximum content length per URL (characters) */
@@ -44,12 +46,16 @@ async function executeExtractContentStep(
   options: ExtractContentOptions
 ): Promise<ResearchState> {
   const {
-    selectors = 'article, .content, main, #content, .article, .post',
+    selectors: explicitSelectors,
+    selector,
     maxUrls = 5,
     maxContentLength = 10000,
     includeInResults = false,
     timeout = 10000,
   } = options;
+  
+  // Use selectors if provided, otherwise use selector (alias), or fall back to default
+  const selectors = explicitSelectors || selector || 'article, .content, main, #content, .article, .post';
 
   // Get search results from state
   const searchResults = state.data.searchResults || [];
@@ -152,5 +158,11 @@ async function simulateContentExtraction(
  * @returns A content extraction step for the research pipeline
  */
 export function extractContent(options: ExtractContentOptions = {}): ReturnType<typeof createStep> {
-  return createStep('ContentExtraction', executeExtractContentStep, options);
+  return createStep('ContentExtraction', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeExtractContentStep(state, options);
+    }, 
+    options
+  );
 }

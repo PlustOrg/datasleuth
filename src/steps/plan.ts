@@ -1,8 +1,8 @@
 /**
- * Planning step for research pipeline
- * Uses LLM to create a research strategy and structured objectives
+ * Research planning step for the research pipeline
+ * Creates structured research plan with objectives and search queries
  */
-import { mastra } from 'mastra';
+import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';

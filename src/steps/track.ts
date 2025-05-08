@@ -69,6 +69,7 @@ async function executeTrackStep(
     metadata: {
       ...state.metadata,
       currentTrack: name,
+      // trackDescription is now supported in metadata thanks to our index signature
       trackDescription: description,
       ...metadata
     },
@@ -172,19 +173,17 @@ async function executeTrackStep(
 }
 
 /**
- * Creates a research track with isolated steps
+ * Creates a track step for the research pipeline
  * 
- * @param options Configuration for this research track
+ * @param options Options for the research track
  * @returns A track step for the research pipeline
  */
 export function track(options: TrackOptions): ReturnType<typeof createStep> {
-  if (!options.name) {
-    throw new Error('Track name is required');
-  }
-  
-  if (!options.steps || !Array.isArray(options.steps) || options.steps.length === 0) {
-    throw new Error('Track must have at least one step');
-  }
-  
-  return createStep(`Track:${options.name}`, executeTrackStep, options);
+  return createStep('Track', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeTrackStep(state, options);
+    }, 
+    options
+  );
 }

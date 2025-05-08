@@ -150,6 +150,7 @@ async function executeClassifyStep(
     metadata: {
       ...state.metadata,
       hasClassification: true,
+      // These properties are now properly supported with our index signature
       entityCount: Object.keys(classificationData.entities).length,
       clusterCount: Object.keys(classificationData.clusters).length,
       relationshipCount: classificationData.relationships.length
@@ -283,6 +284,12 @@ async function simulateEntityClassification(
  * @param options - Classification options
  * @returns A configured classification step
  */
-export function classify(options: ClassifyOptions = {}) {
-  return createStep('Classify', executeClassifyStep, options);
+export function classify(options: ClassifyOptions = {}): ReturnType<typeof createStep> {
+  return createStep('Classify', 
+    // Wrapper function that matches the expected signature
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executeClassifyStep(state, options);
+    }, 
+    options
+  );
 }
