@@ -7,6 +7,13 @@ import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
 import { generateText, LanguageModel } from 'ai';
+import { 
+  ValidationError, 
+  LLMError, 
+  ConfigurationError 
+} from '../types/errors';
+import { logger, createStepLogger } from '../utils/logging';
+import { executeWithRetry } from '../utils/retry';
 
 /**
  * Schema for analysis results
@@ -42,6 +49,17 @@ export interface AnalyzeOptions {
   includeInResults?: boolean;
   /** Custom prompt for analysis */
   customPrompt?: string;
+  /** Whether to proceed if no content is available */
+  allowEmptyContent?: boolean;
+  /** Maximum content size for analysis (in characters) */
+  maxContentSize?: number;
+  /** Retry configuration for LLM calls */
+  retry?: {
+    /** Maximum number of retries */
+    maxRetries?: number;
+    /** Base delay between retries in ms */
+    baseDelay?: number;
+  };
 }
 
 /**
@@ -67,6 +85,8 @@ async function executeAnalyzeStep(
   state: ResearchState,
   options: AnalyzeOptions
 ): Promise<ResearchState> {
+  const stepLogger = createStepLogger('Analyze');
+  
   const {
     focus,
     llm,
@@ -76,79 +96,239 @@ async function executeAnalyzeStep(
     includeRecommendations = true,
     includeInResults = true,
     customPrompt,
+    allowEmptyContent = false,
+    maxContentSize = 10000, // Default max content size to prevent token limit issues
+    retry = { maxRetries: 2, baseDelay: 1000 }
   } = options;
 
-  console.log(`Analyzing with focus: ${focus}, depth: ${depth}`);
+  stepLogger.info(`Starting analysis with focus: ${focus}, depth: ${depth}`);
   
-  // Get relevant content for analysis
-  const contentToAnalyze: string[] = [];
-  
-  // Add extracted content if available
-  if (state.data.extractedContent) {
-    contentToAnalyze.push(...state.data.extractedContent.map((item: any) => item.content));
-  }
-  
-  // Add factual information if available (only valid facts)
-  if (state.data.factChecks) {
-    const validFactChecks = state.data.factChecks.filter((check: any) => check.isValid);
-    contentToAnalyze.push(...validFactChecks.map((check: any) => check.statement));
-  }
-  
-  if (contentToAnalyze.length === 0) {
-    console.warn('No content found for analysis');
-    return state;
-  }
+  try {
+    // Get relevant content for analysis
+    let contentToAnalyze: string[] = [];
+    
+    // Add extracted content if available
+    if (state.data.extractedContent) {
+      stepLogger.debug(`Adding ${state.data.extractedContent.length} extracted content items to analysis`);
+      contentToAnalyze.push(...state.data.extractedContent.map((item: any) => item.content));
+    }
+    
+    // Add factual information if available (only valid facts)
+    if (state.data.factChecks) {
+      const validFactChecks = state.data.factChecks.filter((check: any) => check.isValid);
+      stepLogger.debug(`Adding ${validFactChecks.length} validated fact statements to analysis`);
+      contentToAnalyze.push(...validFactChecks.map((check: any) => check.statement));
+    }
+    
+    if (contentToAnalyze.length === 0) {
+      stepLogger.warn('No content found for analysis');
+      
+      if (!allowEmptyContent) {
+        throw new ValidationError({
+          message: 'No content available for analysis',
+          step: 'Analyze',
+          details: {
+            hasExtractedContent: !!state.data.extractedContent,
+            hasFactChecks: !!state.data.factChecks,
+            focus
+          },
+          suggestions: [
+            "Ensure content extraction or fact checking steps run successfully before analysis",
+            "Set 'allowEmptyContent' to true if this step should be optional",
+            "Provide explicit content to analyze via the research state"
+          ]
+        });
+      }
+      
+      // If empty content is allowed, return state unchanged
+      return state;
+    }
 
-  // Check for an LLM to use - either from options or from state
-  const modelToUse = llm || state.defaultLLM;
-  
-  // If no LLM is available, throw an error
-  if (!modelToUse) {
-    throw new Error(
-      "No language model provided for analysis step. Please provide an LLM either in the step options or as a defaultLLM in the research function."
+    // Check for an LLM to use - either from options or from state
+    const modelToUse = llm || state.defaultLLM;
+    
+    // If no LLM is available, throw an error
+    if (!modelToUse) {
+      throw new ConfigurationError({
+        message: "No language model provided for analysis step",
+        step: 'Analyze',
+        details: { focus, options },
+        suggestions: [
+          "Provide an LLM in the step options using the 'llm' parameter",
+          "Set a defaultLLM when initializing the research function",
+          "Example: research({ defaultLLM: openai('gpt-4'), ... })"
+        ]
+      });
+    }
+
+    const startTime = Date.now();
+    
+    // Trim content if it exceeds the maximum size
+    let totalContentSize = contentToAnalyze.join('\n\n').length;
+    if (totalContentSize > maxContentSize) {
+      stepLogger.warn(`Content size (${totalContentSize} chars) exceeds maximum (${maxContentSize}), trimming content`);
+      
+      // Sort by importance (prioritize fact-checked content)
+      // This is a simplified approach - in a real implementation you might use more sophisticated methods
+      const trimmedContent: string[] = [];
+      let currentSize = 0;
+      
+      for (const content of contentToAnalyze) {
+        const contentSize = content.length;
+        if (currentSize + contentSize <= maxContentSize) {
+          trimmedContent.push(content);
+          currentSize += contentSize + 2; // +2 for the newlines
+        } else {
+          const remainingSize = maxContentSize - currentSize;
+          if (remainingSize > 50) { // Only add if we can include a meaningful chunk
+            trimmedContent.push(content.substring(0, remainingSize - 3) + '...');
+          }
+          break;
+        }
+      }
+      
+      contentToAnalyze = trimmedContent;
+      totalContentSize = contentToAnalyze.join('\n\n').length;
+      stepLogger.info(`Content trimmed to ${totalContentSize} chars (${contentToAnalyze.length} items)`);
+    }
+
+    // Generate analysis using the provided LLM with retry logic
+    const analysisResult = await generateAnalysisWithLLM(
+      contentToAnalyze,
+      state.query,
+      focus,
+      depth,
+      includeEvidence,
+      includeRecommendations,
+      modelToUse,
+      temperature,
+      customPrompt,
+      retry,
+      stepLogger
     );
-  }
-
-  // Generate analysis using the provided LLM
-  const analysisResult = await generateAnalysisWithLLM(
-    contentToAnalyze,
-    state.query,
-    focus,
-    depth,
-    includeEvidence,
-    includeRecommendations,
-    modelToUse,
-    temperature,
-    customPrompt
-  );
-  
-  // Store the analysis in the appropriate format
-  const focusKey = focus.replace(/\s+/g, '-').toLowerCase();
-  
-  // Update state with analysis
-  const newState = {
-    ...state,
-    data: {
-      ...state.data,
-      analysis: {
-        ...(state.data.analysis || {}),
-        [focusKey]: analysisResult,
+    
+    const timeTaken = Date.now() - startTime;
+    stepLogger.info(`Analysis for focus "${focus}" completed in ${timeTaken}ms with confidence: ${analysisResult.confidence.toFixed(2)}`);
+    stepLogger.debug(`Generated ${analysisResult.insights.length} insights for focus "${focus}"`);
+    
+    // Store the analysis in the appropriate format
+    const focusKey = focus.replace(/\s+/g, '-').toLowerCase();
+    
+    // Update state with analysis and metadata
+    const newState = {
+      ...state,
+      data: {
+        ...state.data,
+        analysis: {
+          ...(state.data.analysis || {}),
+          [focusKey]: analysisResult,
+        },
+        analysisMetadata: {
+          ...(state.data.analysisMetadata || {}),
+          [focusKey]: {
+            executionTimeMs: timeTaken,
+            contentSize: totalContentSize,
+            contentItems: contentToAnalyze.length,
+            insightsCount: analysisResult.insights.length,
+            confidence: analysisResult.confidence,
+            depth,
+            timestamp: new Date().toISOString()
+          }
+        }
       },
-    },
-  };
-
-  // Add to results if requested
-  if (includeInResults) {
-    return {
-      ...newState,
-      results: [
-        ...newState.results,
-        { analysis: { [focusKey]: analysisResult } },
-      ],
+      metadata: {
+        ...state.metadata,
+        confidenceScore: Math.max(
+          state.metadata.confidenceScore || 0,
+          analysisResult.confidence
+        )
+      }
     };
-  }
 
-  return newState;
+    // Add to results if requested
+    if (includeInResults) {
+      return {
+        ...newState,
+        results: [
+          ...newState.results,
+          { 
+            analysis: { 
+              [focusKey]: {
+                ...analysisResult,
+                metadata: newState.data.analysisMetadata[focusKey]
+              } 
+            } 
+          },
+        ],
+      };
+    }
+
+    return newState;
+  } catch (error: unknown) {
+    // Handle specific error types
+    if (error instanceof ValidationError || 
+        error instanceof LLMError || 
+        error instanceof ConfigurationError) {
+      // These are already properly formatted errors, just throw them
+      throw error;
+    }
+    
+    // Handle generic errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    stepLogger.error(`Error during analysis execution: ${errorMessage}`);
+    
+    // Check error patterns to create appropriate error types
+    if (errorMessage.includes('JSON') || errorMessage.includes('parse')) {
+      throw new LLMError({
+        message: `Failed to parse LLM response as valid JSON during analysis: ${errorMessage}`,
+        step: 'Analyze', 
+        details: { error, focus: options.focus },
+        retry: true,
+        suggestions: [
+          "Verify the prompt is properly constructed to elicit JSON",
+          "Try a different model that produces more reliable structured output",
+          "Consider simplifying the requested analysis"
+        ]
+      });
+    } else if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
+      throw new LLMError({
+        message: `LLM context length exceeded during analysis: ${errorMessage}`,
+        step: 'Analyze',
+        details: { error, focus: options.focus },
+        retry: false,
+        suggestions: [
+          "Reduce the maxContentSize option",
+          "Use a model with larger context window",
+          "Split analysis into multiple focused queries"
+        ]
+      });
+    } else if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
+      throw new LLMError({
+        message: `LLM rate limit exceeded during analysis: ${errorMessage}`,
+        step: 'Analyze',
+        details: { error, focus: options.focus },
+        retry: true,
+        suggestions: [
+          "Wait and try again later",
+          "Implement request throttling in your application",
+          "Consider using a different LLM provider or API key"
+        ]
+      });
+    }
+    
+    // Generic LLM error fallback
+    throw new LLMError({
+      message: `Error during analysis with LLM: ${errorMessage}`,
+      step: 'Analyze',
+      details: { originalError: error, focus: options.focus },
+      retry: true,
+      suggestions: [
+        "Check your LLM configuration",
+        "Verify API key and model availability",
+        "The LLM service might be experiencing issues, try again later"
+      ]
+    });
+  }
 }
 
 /**
@@ -163,19 +343,27 @@ async function generateAnalysisWithLLM(
   includeRecommendations: boolean,
   llm: LanguageModel,
   temperature: number,
-  customPrompt?: string
+  customPrompt?: string,
+  retry?: { maxRetries?: number; baseDelay?: number },
+  stepLogger?: ReturnType<typeof createStepLogger>
 ): Promise<AnalysisResult> {
-  try {
-    // Prepare the content to analyze
-    const contentText = contentItems.join('\n\n');
-    
-    // Create a system prompt by replacing placeholders in the template
-    const systemPrompt = (customPrompt || DEFAULT_ANALYSIS_PROMPT)
-      .replace('{focus}', focus)
-      .replace('{depth}', depth);
-    
-    // Construct the prompt for analysis
-    const analysisPrompt = `
+  // Use default logger if stepLogger not provided
+  const logger = stepLogger || createStepLogger('Analyze');
+  
+  return executeWithRetry(
+    async () => {
+      try {
+        // Prepare the content to analyze
+        const contentText = contentItems.join('\n\n');
+        logger.debug(`Preparing analysis for ${contentItems.length} content items (${contentText.length} chars)`);
+        
+        // Create a system prompt by replacing placeholders in the template
+        const systemPrompt = (customPrompt || DEFAULT_ANALYSIS_PROMPT)
+          .replace('{focus}', focus)
+          .replace('{depth}', depth);
+        
+        // Construct the prompt for analysis
+        const analysisPrompt = `
 Query: "${query}"
 
 CONTENT TO ANALYZE:
@@ -198,28 +386,92 @@ Format your response as valid JSON with the following structure:
 Ensure the JSON is properly formatted with no trailing commas.
 `;
 
-    // Generate the analysis using the AI SDK
-    const { text } = await generateText({
-      model: llm,
-      system: systemPrompt,
-      prompt: analysisPrompt,
-      temperature,
-    });
+        logger.debug(`Sending analysis request to LLM with temperature ${temperature}`);
+        
+        // Generate the analysis using the AI SDK
+        const { text } = await generateText({
+          model: llm,
+          system: systemPrompt,
+          prompt: analysisPrompt,
+          temperature,
+        });
 
-    // Parse the JSON response
-    try {
-      const parsedAnalysis = JSON.parse(text);
-      return analysisResultSchema.parse(parsedAnalysis);
-    } catch (parseError) {
-      console.error('Failed to parse LLM response as valid JSON:', parseError);
-      console.debug('Raw LLM response:', text);
-      throw new Error('LLM response was not valid JSON for analysis result');
+        // Parse the JSON response
+        try {
+          logger.debug(`Received response from LLM, parsing JSON`);
+          const parsedAnalysis = JSON.parse(text);
+          
+          // Validate against schema
+          try {
+            const validatedAnalysis = analysisResultSchema.parse(parsedAnalysis);
+            logger.debug(`Successfully validated analysis with ${validatedAnalysis.insights.length} insights`);
+            return validatedAnalysis;
+          } catch (validationError) {
+            logger.error(`LLM response failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`);
+            logger.debug(`Invalid analysis structure: ${JSON.stringify(parsedAnalysis)}`);
+            
+            throw new ValidationError({
+              message: `Analysis result failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`,
+              step: 'Analyze',
+              details: { 
+                parsedResponse: parsedAnalysis,
+                validationError,
+                schema: analysisResultSchema.toString()
+              },
+              retry: true,
+              suggestions: [
+                "Check if the LLM is following the requested JSON structure",
+                "Verify that required fields are being generated",
+                "Consider simplifying the schema requirements"
+              ]
+            });
+          }
+        } catch (parseError) {
+          logger.error(`Failed to parse LLM response as valid JSON`);
+          logger.debug(`Raw LLM response: ${text}`);
+          
+          throw new LLMError({
+            message: 'LLM response was not valid JSON for analysis result',
+            step: 'Analyze',
+            details: { 
+              rawResponse: text, 
+              parseError 
+            },
+            retry: true,
+            suggestions: [
+              "Verify the prompt is properly instructing the model to return valid JSON",
+              "Try a different model that produces more reliable structured output",
+              "Consider using a more structured approach with explicit field extraction"
+            ]
+          });
+        }
+      } catch (error: unknown) {
+        // If it's already one of our error types, just rethrow it
+        if (error instanceof ValidationError || error instanceof LLMError) {
+          throw error;
+        }
+        
+        // Otherwise wrap in LLMError
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Error generating analysis with LLM: ${errorMessage}`);
+        
+        throw new LLMError({
+          message: `Failed to generate analysis: ${errorMessage}`,
+          step: 'Analyze',
+          details: { error, focus },
+          retry: true
+        });
+      }
+    },
+    {
+      maxRetries: retry?.maxRetries ?? 2,
+      retryDelay: retry?.baseDelay ?? 1000,
+      backoffFactor: 2,
+      onRetry: (attempt, error, delay) => {
+        logger.warn(`Retry attempt ${attempt} for analysis: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
+      }
     }
-  } catch (error: unknown) {
-    console.error('Error generating analysis with LLM:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to generate analysis: ${errorMessage}`);
-  }
+  );
 }
 
 /**
@@ -229,11 +481,21 @@ Ensure the JSON is properly formatted with no trailing commas.
  * @returns An analysis step for the research pipeline
  */
 export function analyze(options: AnalyzeOptions): ReturnType<typeof createStep> {
-  return createStep('Analyze', 
+  return createStep(
+    'Analyze', 
     // Wrapper function that matches the expected signature
     async (state: ResearchState, opts?: Record<string, any>) => {
       return executeAnalyzeStep(state, options);
     }, 
-    options
+    options,
+    {
+      // Mark as retryable by default for the entire step
+      retryable: true,
+      maxRetries: options.retry?.maxRetries || 2,
+      retryDelay: options.retry?.baseDelay || 1000,
+      backoffFactor: 2,
+      // Mark as optional if allowEmptyContent is true
+      optional: options.allowEmptyContent || false
+    }
   );
 }

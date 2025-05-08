@@ -6,6 +6,14 @@ import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
+import { generateText, LanguageModel } from 'ai';
+import { 
+  ValidationError, 
+  LLMError, 
+  ConfigurationError 
+} from '../types/errors';
+import { logger, createStepLogger } from '../utils/logging';
+import { executeWithRetry } from '../utils/retry';
 
 /**
  * Schema for refined query output
@@ -26,8 +34,8 @@ export type RefinedQuery = z.infer<typeof refinedQuerySchema>;
 export interface RefineQueryOptions {
   /** What to base the refinement on */
   basedOn?: 'findings' | 'gaps' | 'factuality' | 'all';
-  /** Model to use for query refinement */
-  model?: any;
+  /** Language Model to use for query refinement */
+  llm?: LanguageModel;
   /** Maximum number of queries to generate */
   maxQueries?: number;
   /** Whether to include the refined queries in the final results */
@@ -36,6 +44,15 @@ export interface RefineQueryOptions {
   customPrompt?: string;
   /** Temperature for the LLM (0.0 to 1.0) */
   temperature?: number;
+  /** Retry configuration for LLM calls */
+  retry?: {
+    /** Maximum number of retries */
+    maxRetries?: number;
+    /** Base delay between retries in ms */
+    baseDelay?: number;
+  };
+  /** Whether to use simulation instead of actual LLM (for development/testing) */
+  useSimulation?: boolean;
 }
 
 /**
@@ -61,62 +78,171 @@ async function executeRefineQueryStep(
   state: ResearchState,
   options: RefineQueryOptions
 ): Promise<ResearchState> {
+  const stepLogger = createStepLogger('RefineQuery');
+  
   const {
     basedOn = 'all',
     maxQueries = 3,
     includeInResults = false,
     temperature = 0.7,
+    llm,
+    customPrompt,
+    retry = { maxRetries: 2, baseDelay: 1000 },
+    useSimulation = false
   } = options;
 
-  console.log(`Refining query based on: ${basedOn}`);
+  stepLogger.info(`Starting query refinement based on: ${basedOn}`);
   
-  // Get relevant information from state based on refinement strategy
-  const relevantData: Record<string, any> = {
-    originalQuery: state.query,
-  };
-  
-  if (basedOn === 'findings' || basedOn === 'all') {
-    relevantData.extractedContent = state.data.extractedContent || [];
-    relevantData.searchResults = state.data.searchResults || [];
-  }
-  
-  if (basedOn === 'gaps' || basedOn === 'all') {
-    relevantData.researchPlan = state.data.researchPlan || {};
-    // Identify information that's missing compared to research plan
-  }
-  
-  if (basedOn === 'factuality' || basedOn === 'all') {
-    relevantData.factChecks = state.data.factChecks || [];
-    // Focus on areas where factuality is low or contradictory
-  }
-  
-  // For now, simulate query refinement
-  // In a real implementation, this would use an LLM to generate refined queries
-  const refinedQueries = await simulateQueryRefinement(
-    state.query,
-    basedOn,
-    relevantData,
-    maxQueries
-  );
-  
-  // Update state with refined queries
-  const newState = {
-    ...state,
-    data: {
-      ...state.data,
-      refinedQueries,
-    },
-  };
-
-  // Add to results if requested
-  if (includeInResults) {
-    return {
-      ...newState,
-      results: [...newState.results, { refinedQueries }],
+  try {
+    // Get relevant information from state based on refinement strategy
+    const relevantData: Record<string, any> = {
+      originalQuery: state.query,
     };
-  }
+    
+    if (basedOn === 'findings' || basedOn === 'all') {
+      relevantData.extractedContent = state.data.extractedContent || [];
+      relevantData.searchResults = state.data.searchResults || [];
+    }
+    
+    if (basedOn === 'gaps' || basedOn === 'all') {
+      relevantData.researchPlan = state.data.researchPlan || {};
+    }
+    
+    if (basedOn === 'factuality' || basedOn === 'all') {
+      relevantData.factChecks = state.data.factChecks || [];
+    }
+    
+    // Use simulation or LLM-based refinement
+    let refinedQueries: RefinedQuery[];
+    const startTime = Date.now();
+    
+    if (useSimulation) {
+      stepLogger.info('Using simulation mode for query refinement');
+      refinedQueries = await simulateQueryRefinement(
+        state.query,
+        basedOn,
+        relevantData,
+        maxQueries
+      );
+    } else {
+      // Use an LLM to generate refined queries
+      const modelToUse = llm || state.defaultLLM;
+      
+      // If no LLM is available, fall back to simulation
+      if (!modelToUse) {
+        stepLogger.warn('No language model provided for query refinement, falling back to simulation');
+        refinedQueries = await simulateQueryRefinement(
+          state.query,
+          basedOn,
+          relevantData,
+          maxQueries
+        );
+      } else {
+        stepLogger.info('Using LLM for query refinement');
+        refinedQueries = await generateRefinedQueriesWithLLM(
+          state.query,
+          basedOn,
+          relevantData,
+          maxQueries,
+          modelToUse,
+          temperature,
+          customPrompt,
+          retry,
+          stepLogger
+        );
+      }
+    }
+    
+    const timeTaken = Date.now() - startTime;
+    stepLogger.info(`Query refinement completed in ${timeTaken}ms, generated ${refinedQueries.length} refined queries`);
+    
+    // Update state with refined queries
+    const newState = {
+      ...state,
+      data: {
+        ...state.data,
+        refinedQueries,
+      },
+      metadata: {
+        ...state.metadata,
+        queryRefinementTimeMs: timeTaken
+      }
+    };
 
-  return newState;
+    // Add to results if requested
+    if (includeInResults) {
+      return {
+        ...newState,
+        results: [...newState.results, { refinedQueries }],
+      };
+    }
+
+    return newState;
+  } catch (error: unknown) {
+    // Handle specific error types
+    if (error instanceof ValidationError || 
+        error instanceof LLMError || 
+        error instanceof ConfigurationError) {
+      // These are already properly formatted errors, just throw them
+      throw error;
+    }
+    
+    // Handle generic errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    stepLogger.error(`Error during query refinement: ${errorMessage}`);
+    
+    // Check error patterns to create appropriate error types
+    if (errorMessage.includes('JSON') || errorMessage.includes('parse')) {
+      throw new LLMError({
+        message: `Failed to parse LLM response as valid JSON during query refinement: ${errorMessage}`,
+        step: 'RefineQuery', 
+        details: { error },
+        retry: true,
+        suggestions: [
+          "Verify the prompt is properly constructed to elicit JSON",
+          "Try a different model that produces more reliable structured output",
+          "Consider using a different temperature value"
+        ]
+      });
+    } else if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
+      throw new LLMError({
+        message: `LLM context length exceeded during query refinement: ${errorMessage}`,
+        step: 'RefineQuery',
+        details: { error },
+        retry: false,
+        suggestions: [
+          "Reduce the amount of context provided to the model",
+          "Use a model with larger context window",
+          "Simplify the refinement strategy by focusing on fewer aspects"
+        ]
+      });
+    } else if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
+      throw new LLMError({
+        message: `LLM rate limit exceeded during query refinement: ${errorMessage}`,
+        step: 'RefineQuery',
+        details: { error },
+        retry: true,
+        suggestions: [
+          "Wait and try again later",
+          "Implement request throttling in your application",
+          "Consider using a different LLM provider or API key"
+        ]
+      });
+    }
+    
+    // Generic LLM error fallback
+    throw new LLMError({
+      message: `Error during query refinement: ${errorMessage}`,
+      step: 'RefineQuery',
+      details: { originalError: error },
+      retry: true,
+      suggestions: [
+        "Check your LLM configuration",
+        "Verify API key and model availability",
+        "The LLM service might be experiencing issues, try again later"
+      ]
+    });
+  }
 }
 
 /**
@@ -182,6 +308,228 @@ async function simulateQueryRefinement(
   
   // Ensure we don't exceed the max number of queries
   return refinedQueries.slice(0, maxQueries);
+}
+
+/**
+ * Generate refined queries using the provided LLM from the AI SDK
+ */
+async function generateRefinedQueriesWithLLM(
+  originalQuery: string,
+  basedOn: string,
+  relevantData: Record<string, any>,
+  maxQueries: number,
+  llm: LanguageModel,
+  temperature: number,
+  customPrompt?: string,
+  retry?: { maxRetries?: number; baseDelay?: number },
+  stepLogger?: ReturnType<typeof createStepLogger>
+): Promise<RefinedQuery[]> {
+  // Use default logger if stepLogger not provided
+  const logger = stepLogger || createStepLogger('RefineQuery');
+  
+  return executeWithRetry(
+    async () => {
+      try {
+        logger.debug(`Generating refined queries for: "${originalQuery.substring(0, 50)}${originalQuery.length > 50 ? '...' : ''}"`);
+        
+        // Prepare context from relevant data
+        let contextText = `Original query: "${originalQuery}"\n\n`;
+        
+        // Add search results if available
+        if (relevantData.searchResults && relevantData.searchResults.length > 0) {
+          contextText += "Search Results:\n";
+          relevantData.searchResults.slice(0, 5).forEach((result: any, index: number) => {
+            contextText += `${index + 1}. ${result.title} - ${result.snippet || 'No snippet available'}\n`;
+          });
+          contextText += "\n";
+        }
+        
+        // Add extracted content if available (summaries only)
+        if (relevantData.extractedContent && relevantData.extractedContent.length > 0) {
+          contextText += "Extracted Content Summaries:\n";
+          relevantData.extractedContent.slice(0, 3).forEach((content: any, index: number) => {
+            const contentSummary = content.content.substring(0, 150) + '...';
+            contextText += `${index + 1}. ${content.title}: ${contentSummary}\n`;
+          });
+          contextText += "\n";
+        }
+        
+        // Add fact check results if available
+        if (relevantData.factChecks && relevantData.factChecks.length > 0) {
+          contextText += "Fact Check Results:\n";
+          const validFacts = relevantData.factChecks.filter((check: any) => check.isValid);
+          const invalidFacts = relevantData.factChecks.filter((check: any) => !check.isValid);
+          
+          contextText += `Valid facts: ${validFacts.length}, Invalid facts: ${invalidFacts.length}\n`;
+          if (invalidFacts.length > 0) {
+            contextText += "Examples of invalid facts:\n";
+            invalidFacts.slice(0, 2).forEach((fact: any, index: number) => {
+              contextText += `${index + 1}. "${fact.statement}" (Confidence: ${fact.confidence})\n`;
+            });
+          }
+          contextText += "\n";
+        }
+        
+        // Add research plan if available
+        if (relevantData.researchPlan && relevantData.researchPlan.objectives) {
+          contextText += "Research Plan Objectives:\n";
+          relevantData.researchPlan.objectives.forEach((objective: string, index: number) => {
+            contextText += `${index + 1}. ${objective}\n`;
+          });
+          contextText += "\n";
+        }
+        
+        // Use default or custom prompt
+        const systemPrompt = customPrompt || DEFAULT_REFINE_QUERY_PROMPT;
+        
+        // Construct the query refinement prompt
+        const refinementPrompt = `
+Based on the original query and the research context provided, generate ${maxQueries} refined search queries 
+that will yield more relevant, comprehensive, or accurate information.
+
+Context:
+${contextText}
+
+Refinement strategy focus: ${basedOn}
+
+For each refined query, provide:
+1. The refined query text
+2. The refinement strategy used
+3. Targeted aspects that the refinement focuses on
+4. The reason for this specific refinement
+
+Format your response as valid JSON with the following structure:
+[
+  {
+    "originalQuery": "${originalQuery}",
+    "refinedQuery": "refined query text here",
+    "refinementStrategy": "strategy name",
+    "targetedAspects": ["aspect1", "aspect2", ...],
+    "reasonForRefinement": "explanation of why this refinement is helpful"
+  },
+  ...
+]
+
+Ensure the JSON is properly formatted with no trailing commas.
+`;
+
+        logger.debug(`Sending query refinement request to LLM with temperature ${temperature}`);
+        
+        // Generate the refined queries using the AI SDK
+        const { text } = await generateText({
+          model: llm,
+          system: systemPrompt,
+          prompt: refinementPrompt,
+          temperature,
+        });
+
+        // Parse the JSON response
+        try {
+          logger.debug('Received response from LLM, parsing JSON');
+          const parsedResult = JSON.parse(text);
+          
+          // Validate against schema
+          if (!Array.isArray(parsedResult)) {
+            throw new ValidationError({
+              message: 'LLM response is not an array for refined queries',
+              step: 'RefineQuery',
+              details: { parsedResponse: parsedResult },
+              retry: true,
+              suggestions: [
+                "Ensure the prompt explicitly asks for an array of objects",
+                "Try a different model that produces more reliable structured output"
+              ]
+            });
+          }
+          
+          // Validate each item in the array
+          const validatedQueries: RefinedQuery[] = [];
+          
+          for (const item of parsedResult) {
+            try {
+              const validatedItem = refinedQuerySchema.parse(item);
+              validatedQueries.push(validatedItem);
+            } catch (validationError) {
+              logger.warn(`Skipping invalid refined query: ${JSON.stringify(item)}`);
+              logger.debug(`Validation error: ${validationError instanceof Error ? validationError.message : 'Unknown error'}`);
+            }
+          }
+          
+          if (validatedQueries.length === 0) {
+            throw new ValidationError({
+              message: 'No valid refined queries could be extracted from LLM response',
+              step: 'RefineQuery',
+              details: { 
+                parsedResponse: parsedResult,
+                schema: refinedQuerySchema.toString()
+              },
+              retry: true,
+              suggestions: [
+                "Check if the LLM is following the requested JSON structure",
+                "Try a different model or adjust the temperature",
+                "Simplify the schema requirements"
+              ]
+            });
+          }
+          
+          logger.debug(`Successfully validated ${validatedQueries.length} refined queries`);
+          return validatedQueries;
+          
+        } catch (parseError) {
+          if (parseError instanceof ValidationError) {
+            throw parseError;
+          }
+          
+          logger.error(`Failed to parse LLM response as valid JSON`);
+          logger.debug(`Raw LLM response: ${text}`);
+          
+          throw new LLMError({
+            message: 'LLM response was not valid JSON for refined queries',
+            step: 'RefineQuery',
+            details: { 
+              rawResponse: text, 
+              parseError 
+            },
+            retry: true,
+            suggestions: [
+              "Verify the prompt is properly instructing the model to return valid JSON",
+              "Try a different model that produces more reliable structured output",
+              "Consider using a lower temperature value for more consistent output"
+            ]
+          });
+        }
+      } catch (error: unknown) {
+        // If it's already one of our error types, just rethrow it
+        if (error instanceof ValidationError || error instanceof LLMError) {
+          throw error;
+        }
+        
+        // Otherwise wrap in LLMError
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Error generating refined queries with LLM: ${errorMessage}`);
+        
+        throw new LLMError({
+          message: `Failed to generate refined queries: ${errorMessage}`,
+          step: 'RefineQuery',
+          details: { error, originalQuery },
+          retry: true,
+          suggestions: [
+            "Check your LLM configuration",
+            "Verify API key and model availability",
+            "The model may be experiencing issues, try again later"
+          ]
+        });
+      }
+    },
+    {
+      maxRetries: retry?.maxRetries ?? 2,
+      retryDelay: retry?.baseDelay ?? 1000,
+      backoffFactor: 2,
+      onRetry: (attempt, error, delay) => {
+        logger.warn(`Retry attempt ${attempt} for query refinement: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
+      }
+    }
+  );
 }
 
 /**

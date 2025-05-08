@@ -3,8 +3,31 @@
  * Enables concurrent research paths for more efficient deep research
  */
 import { createStep } from '../utils/steps';
-import { ResearchState, ResearchStep, ResearchError } from '../types/pipeline';
+import { ResearchState, ResearchStep } from '../types/pipeline';
 import { TrackResult } from './track';
+import { 
+  ValidationError, 
+  ConfigurationError,  
+  ProcessingError,
+  TimeoutError
+} from '../types/errors';
+import { logger, createStepLogger } from '../utils/logging';
+
+/**
+ * Custom error for parallel execution issues
+ */
+export class ParallelError extends ProcessingError {
+  constructor(options: {
+    message: string;
+    step: string;
+    details?: Record<string, any>;
+    retry?: boolean;
+    suggestions?: string[];
+  }) {
+    super(options);
+    this.name = 'ParallelError';
+  }
+}
 
 /**
  * Options for parallel execution
@@ -20,21 +43,13 @@ export interface ParallelOptions {
   mergeFunction?: (tracks: Record<string, TrackResult>, state: ResearchState) => any;
   /** Whether to include the merged result in the results array */
   includeInResults?: boolean;
-}
-
-/**
- * Custom error with additional research properties
- */
-export class ParallelResearchError extends Error implements ResearchError {
-  step: string;
-  code: string;
-  
-  constructor(message: string, step: string, code: string) {
-    super(message);
-    this.name = 'ParallelResearchError';
-    this.step = step;
-    this.code = code;
-  }
+  /** Retry configuration for the parallel step */
+  retry?: {
+    /** Maximum number of retries */
+    maxRetries?: number;
+    /** Base delay between retries in ms */
+    baseDelay?: number;
+  };
 }
 
 /**
@@ -44,146 +59,289 @@ async function executeParallelStep(
   state: ResearchState,
   options: ParallelOptions
 ): Promise<ResearchState> {
+  const stepLogger = createStepLogger('Parallel');
+  
   const {
     tracks,
     continueOnError = true,
     timeout = 300000, // 5 minutes default timeout
-    mergeFunction,
-    includeInResults = true
+    mergeFunction = defaultMergeFunction,
+    includeInResults = true,
+    retry = { maxRetries: 0, baseDelay: 1000 }
   } = options;
   
-  if (!tracks || !Array.isArray(tracks) || tracks.length === 0) {
-    throw new Error('Parallel execution requires at least one track');
-  }
-  
-  console.log(`Starting parallel execution of ${tracks.length} tracks`);
-  
-  // Create a timeout promise
-  const timeoutPromise = new Promise<ResearchState>((_, reject) => {
-    setTimeout(() => {
-      reject(new Error(`Parallel execution timed out after ${timeout}ms`));
-    }, timeout);
-  });
-  
-  // Execute all tracks in parallel
-  const trackPromises = tracks.map(async (track) => {
-    try {
-      return await track.execute(state);
-    } catch (error) {
-      if (continueOnError) {
-        console.error(`Error in parallel track:`, error);
-        return {
-          ...state,
-          errors: [
-            ...state.errors,
-            new ParallelResearchError(
-              error instanceof Error ? error.message : String(error),
-              track.name || 'unknown',
-              'PARALLEL_EXECUTION_ERROR'
-            )
-          ]
-        };
-      } else {
-        throw error;
-      }
-    }
-  });
-  
   try {
-    // Wait for all tracks to complete or timeout
-    const trackStates = await Promise.race([
-      Promise.all(trackPromises),
-      timeoutPromise
-    ]) as ResearchState[];
+    // Validate inputs
+    if (!tracks || !Array.isArray(tracks) || tracks.length === 0) {
+      throw new ValidationError({
+        message: "Parallel execution requires at least one track",
+        step: 'Parallel',
+        details: { options },
+        suggestions: [
+          "Provide at least one track in the tracks array",
+          "Tracks should be created using the track() function"
+        ]
+      });
+    }
     
-    // Collect all track results and merge them
-    const trackResults: Record<string, TrackResult> = {};
-    let mergedData = { ...state.data };
-    let allResults = [...state.results];
-    let allErrors = [...state.errors];
+    // Check for invalid tracks
+    const invalidTracks = tracks.filter(track => !track || typeof track.execute !== 'function');
+    if (invalidTracks.length > 0) {
+      throw new ValidationError({
+        message: `Found ${invalidTracks.length} invalid tracks in parallel step`,
+        step: 'Parallel',
+        details: { invalidTracks },
+        suggestions: [
+          "Ensure all tracks are created using the track() function",
+          "Check for undefined or null values in the tracks array"
+        ]
+      });
+    }
     
-    // Extract track results from each state
-    trackStates.forEach((trackState: ResearchState) => {
-      // Merge errors
-      allErrors = [...allErrors, ...trackState.errors];
-      
-      // Collect track results
-      if (trackState.data.tracks) {
-        Object.entries(trackState.data.tracks).forEach(([trackName, trackResult]) => {
-          trackResults[trackName] = trackResult as TrackResult;
-        });
-      }
-      
-      // Merge results
-      allResults = [...allResults, ...trackState.results];
-      
-      // Merge data (except tracks, which we handle separately)
-      const { tracks: _tracks, ...otherData } = trackState.data;
-      mergedData = {
-        ...mergedData,
-        ...otherData
-      };
+    // Check timeout value
+    if (timeout <= 0) {
+      throw new ValidationError({
+        message: `Invalid timeout value: ${timeout}. Must be greater than 0.`,
+        step: 'Parallel',
+        details: { timeout },
+        suggestions: [
+          "Provide a positive timeout value in milliseconds",
+          "Default timeout is 300000ms (5 minutes)"
+        ]
+      });
+    }
+    
+    stepLogger.info(`Starting parallel execution of ${tracks.length} tracks with timeout ${timeout}ms`);
+    stepLogger.debug(`Parallel configuration: continueOnError=${continueOnError}, includeInResults=${includeInResults}`);
+    
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new TimeoutError({
+          message: `Parallel execution timed out after ${timeout}ms`,
+          step: 'Parallel',
+          details: { 
+            timeout,
+            trackCount: tracks.length,
+            trackNames: tracks.map(t => t.name)
+          },
+          retry: true,
+          suggestions: [
+            "Increase the timeout value",
+            "Reduce the complexity of tracks",
+            "Split the work into smaller chunks"
+          ]
+        }));
+      }, timeout);
     });
     
-    // Store the collected track results
-    mergedData.tracks = trackResults;
-    
-    // Apply custom merge function if provided
-    let mergedResult;
-    if (mergeFunction) {
+    // Execute all tracks in parallel
+    const trackPromises = tracks.map(async (track, index) => {
       try {
+        stepLogger.debug(`Starting track ${track.name || `#${index+1}`}`);
+        return await track.execute(state);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        stepLogger.error(`Error in track ${track.name || `#${index+1}`}: ${errorMessage}`);
+        
+        if (continueOnError) {
+          // If we should continue despite errors, return a state with the error
+          return {
+            ...state,
+            errors: [
+              ...state.errors,
+              error instanceof Error ? error : new ParallelError({
+                message: `Track ${track.name || `#${index+1}`} failed: ${errorMessage}`,
+                step: 'Parallel',
+                details: { 
+                  trackName: track.name,
+                  trackIndex: index,
+                  error
+                },
+                retry: false
+              })
+            ],
+            metadata: {
+              ...state.metadata,
+              parallelTrackErrors: [
+                ...(state.metadata.parallelTrackErrors || []),
+                {
+                  trackName: track.name || `unnamed-${index}`,
+                  error: errorMessage
+                }
+              ]
+            }
+          };
+        } else {
+          // If we shouldn't continue on errors, rethrow
+          throw error;
+        }
+      }
+    });
+    
+    try {
+      // Wait for all tracks to complete or timeout
+      const trackStates = await Promise.race([
+        Promise.all(trackPromises),
+        timeoutPromise.then(() => { throw new Error('Timeout'); }) // This never resolves, only rejects
+      ]) as ResearchState[];
+      
+      stepLogger.info(`All ${tracks.length} tracks completed execution`);
+      
+      // Collect all track results and merge them
+      const trackResults: Record<string, TrackResult> = {};
+      let mergedData = { ...state.data };
+      let allResults = [...state.results];
+      let allErrors = [...state.errors];
+      
+      // Extract track results from each state
+      trackStates.forEach((trackState: ResearchState, index) => {
+        // Merge errors
+        if (trackState.errors && trackState.errors.length > 0) {
+          allErrors = [...allErrors, ...trackState.errors];
+          stepLogger.debug(`Track ${tracks[index].name || `#${index+1}`} had ${trackState.errors.length} errors`);
+        }
+        
+        // Collect track results
+        if (trackState.data.tracks) {
+          Object.entries(trackState.data.tracks).forEach(([trackName, trackResult]) => {
+            trackResults[trackName] = trackResult as TrackResult;
+            stepLogger.debug(`Collected results from track "${trackName}"`);
+          });
+        }
+        
+        // Merge results
+        if (trackState.results && trackState.results.length > 0) {
+          allResults = [...allResults, ...trackState.results];
+        }
+        
+        // Merge data (except tracks, which we handle separately)
+        const { tracks: _tracks, ...otherData } = trackState.data;
+        mergedData = {
+          ...mergedData,
+          ...otherData
+        };
+      });
+      
+      // Store the collected track results
+      mergedData.tracks = trackResults;
+      
+      // Apply merge function (default or custom)
+      let mergedResult;
+      try {
+        stepLogger.debug(`Applying merge function to ${Object.keys(trackResults).length} track results`);
         mergedResult = await mergeFunction(trackResults, state);
-        console.log('Applied custom merge function to parallel results');
+        stepLogger.info('Successfully merged parallel track results');
         
         if (includeInResults && mergedResult) {
           allResults.push({
             parallelMerged: mergedResult
           });
         }
-      } catch (error) {
-        console.error('Error in parallel merge function:', error);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        stepLogger.error(`Error in parallel merge function: ${errorMessage}`);
+        
         allErrors.push(
-          new ParallelResearchError(
-            error instanceof Error ? error.message : String(error),
-            'ParallelMerge',
-            'PARALLEL_MERGE_ERROR'
-          )
+          new ParallelError({
+            message: `Failed to merge parallel results: ${errorMessage}`,
+            step: 'ParallelMerge',
+            details: { 
+              error,
+              trackCount: Object.keys(trackResults).length 
+            },
+            retry: false,
+            suggestions: [
+              "Check your merge function implementation",
+              "Ensure track results have a consistent structure",
+              "Add error handling in your custom merge function"
+            ]
+          })
         );
       }
+      
+      // Calculate success metrics
+      const completedTracks = Object.values(trackResults).filter(t => t.completed).length;
+      const failedTracks = Object.values(trackResults).filter(t => !t.completed).length;
+      const successRate = completedTracks / Object.keys(trackResults).length;
+      
+      stepLogger.info(`Parallel execution complete: ${completedTracks}/${Object.keys(trackResults).length} tracks successful (${(successRate * 100).toFixed(1)}%)`);
+      
+      return {
+        ...state,
+        data: {
+          ...mergedData,
+          parallelMerged: mergedResult
+        },
+        results: allResults,
+        errors: allErrors,
+        metadata: {
+          ...state.metadata,
+          parallelTracks: { 
+            count: Object.keys(trackResults).length,
+            completed: completedTracks,
+            failed: failedTracks,
+            successRate
+          },
+          parallelCompletedAt: new Date().toISOString()
+        }
+      };
+    } catch (error: unknown) {
+      // This catches both timeout errors and any errors from tracks that aren't handled by continueOnError
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      stepLogger.error(`Error in parallel execution: ${errorMessage}`);
+      
+      // If it's already one of our error types, just add it to the errors
+      const parallelError = error instanceof Error ? error : new ParallelError({
+        message: `Parallel execution failed: ${errorMessage}`,
+        step: 'Parallel',
+        details: { error },
+        retry: true,
+        suggestions: [
+          "Check the configuration of individual tracks",
+          "Consider increasing the timeout value",
+          "Set continueOnError=true to get partial results even if some tracks fail"
+        ]
+      });
+      
+      return {
+        ...state,
+        errors: [
+          ...state.errors,
+          parallelError
+        ],
+        metadata: {
+          ...state.metadata,
+          parallelError: parallelError,
+          parallelFailedAt: new Date().toISOString()
+        }
+      };
+    }
+  } catch (error: unknown) {
+    // This catches validation and configuration errors that occur before we start running tracks
+    if (error instanceof ValidationError || 
+        error instanceof ConfigurationError || 
+        error instanceof TimeoutError ||
+        error instanceof ParallelError) {
+      // If it's already a properly typed error, just rethrow it
+      throw error;
     }
     
-    return {
-      ...state,
-      data: {
-        ...mergedData,
-        parallelMerged: mergedResult
-      },
-      results: allResults,
-      errors: allErrors,
-      metadata: {
-        ...state.metadata,
-        parallelTracks: { count: Object.keys(trackResults).length } as Record<string, any>,
-        parallelCompletedAt: new Date().toISOString()
-      }
-    };
-  } catch (error) {
-    console.error(`Error in parallel execution:`, error);
+    // Otherwise, wrap in a ParallelError
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    stepLogger.error(`Failed to initialize parallel execution: ${errorMessage}`);
     
-    return {
-      ...state,
-      errors: [
-        ...state.errors,
-        new ParallelResearchError(
-          error instanceof Error ? error.message : String(error),
-          'Parallel',
-          'PARALLEL_EXECUTION_ERROR'
-        )
-      ],
-      metadata: {
-        ...state.metadata,
-        parallelError: error instanceof Error ? error : new Error(String(error))
-      }
-    };
+    throw new ParallelError({
+      message: `Parallel execution failed to initialize: ${errorMessage}`,
+      step: 'Parallel',
+      details: { error, options },
+      retry: false,
+      suggestions: [
+        "Check the configuration of the parallel step",
+        "Verify that all tracks are properly configured",
+        "Ensure merge function is properly implemented"
+      ]
+    });
   }
 }
 
@@ -199,7 +357,16 @@ export function parallel(options: ParallelOptions): ReturnType<typeof createStep
     async (state: ResearchState, opts?: Record<string, any>) => {
       return executeParallelStep(state, options);
     }, 
-    options
+    options,
+    {
+      // Add retry configuration to the step metadata
+      retryable: true,
+      maxRetries: options.retry?.maxRetries || 1,
+      retryDelay: options.retry?.baseDelay || 2000,
+      backoffFactor: 2,
+      // Parallel steps are typically required
+      optional: false
+    }
   );
 }
 

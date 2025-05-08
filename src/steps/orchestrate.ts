@@ -5,6 +5,15 @@
 import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState, ResearchStep } from '../types/pipeline';
+import { 
+  ValidationError, 
+  ConfigurationError, 
+  LLMError,
+  ProcessingError,
+  MaxIterationsError
+} from '../types/errors';
+import { logger, createStepLogger } from '../utils/logging';
+import { executeWithRetry } from '../utils/retry';
 
 /**
  * Options for the orchestration step
@@ -22,6 +31,15 @@ export interface OrchestrateOptions {
   exitCriteria?: (state: ResearchState) => boolean | Promise<boolean>;
   /** Whether to include the orchestration results in the final output */
   includeInResults?: boolean;
+  /** Whether to continue if a tool execution fails */
+  continueOnError?: boolean;
+  /** Retry configuration */
+  retry?: {
+    /** Maximum number of retries */
+    maxRetries?: number;
+    /** Base delay between retries in ms */
+    baseDelay?: number;
+  };
 }
 
 /**
@@ -63,6 +81,8 @@ async function executeOrchestrationStep(
   state: ResearchState,
   options: OrchestrateOptions
 ): Promise<ResearchState> {
+  const stepLogger = createStepLogger('Orchestration');
+  
   const {
     model,
     tools,
@@ -70,85 +90,287 @@ async function executeOrchestrationStep(
     maxIterations = 10,
     exitCriteria,
     includeInResults = true,
+    continueOnError = false,
+    retry = { maxRetries: 2, baseDelay: 1000 }
   } = options;
 
-  // In a real implementation, we would instantiate a mastra agent here
-  // For now, we'll simulate the agent's decisions
-
-  // Store the tools in the state for reference
-  let currentState = {
-    ...state,
-    data: {
-      ...state.data,
-      orchestration: {
-        availableTools: Object.keys(tools),
-        iterations: [] as OrchestrationIteration[],
-      },
-    },
-  };
-
-  // Simulate agent iterations
-  const iterations = Math.min(3, maxIterations); // For simulation, we'll just do a few iterations
-  const toolKeys = Object.keys(tools);
-
-  for (let i = 0; i < iterations; i++) {
-    console.log(`Orchestration iteration ${i + 1}/${iterations}`);
-
-    // Simulate agent choosing a tool
-    const chosenToolKey = toolKeys[i % toolKeys.length];
-    const chosenTool = tools[chosenToolKey];
-
-    if (!chosenTool) {
-      console.warn(`Tool "${chosenToolKey}" not found in provided tools`);
-      continue;
+  try {
+    // Validate required parameters
+    if (!model) {
+      throw new ConfigurationError({
+        message: "No model provided for orchestration",
+        step: 'Orchestration',
+        details: { options },
+        suggestions: [
+          "Provide an LLM model via the model parameter",
+          "Example: orchestrate({ model: openai('gpt-4'), ... })"
+        ]
+      });
+    }
+    
+    if (!tools || typeof tools !== 'object' || Object.keys(tools).length === 0) {
+      throw new ConfigurationError({
+        message: "No tools provided for orchestration",
+        step: 'Orchestration',
+        details: { options },
+        suggestions: [
+          "Provide at least one tool in the tools object",
+          "Tools should be created using step factory functions like searchWeb(), analyze(), etc.",
+          "Example: tools: { search: searchWeb(), analyze: analyze() }"
+        ]
+      });
+    }
+    
+    if (maxIterations <= 0) {
+      throw new ValidationError({
+        message: `Invalid maxIterations value: ${maxIterations}. Must be greater than 0.`,
+        step: 'Orchestration',
+        details: { maxIterations },
+        suggestions: [
+          "Provide a positive integer for maxIterations",
+          "Default is 10 iterations"
+        ]
+      });
     }
 
-    // Record the tool choice
-    currentState.data.orchestration.iterations.push({
-      iteration: i + 1,
-      toolChosen: chosenToolKey,
-      reasoning: `Chose ${chosenToolKey} because it's the next logical step in the research process.`,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Execute the chosen tool
-    console.log(`Executing tool: ${chosenToolKey}`);
-    const nextState = await chosenTool.execute(currentState);
+    stepLogger.info(`Starting orchestration with ${Object.keys(tools).length} available tools and max ${maxIterations} iterations`);
     
-    // Preserve our orchestration data structure
-    currentState = {
-      ...nextState,
+    // In a real implementation, we would instantiate a mastra agent here
+    // For now, we'll simulate the agent's decisions with proper error handling
+    
+    // Store the tools in the state for reference
+    let currentState = {
+      ...state,
       data: {
-        ...nextState.data,
+        ...state.data,
         orchestration: {
-          ...currentState.data.orchestration,
-        }
+          availableTools: Object.keys(tools),
+          iterations: [] as OrchestrationIteration[],
+        },
+      },
+      metadata: {
+        ...state.metadata,
+        orchestrationStarted: new Date().toISOString()
       }
     };
 
-    // Check exit criteria if provided
-    if (exitCriteria && await exitCriteria(currentState)) {
-      console.log('Exit criteria met, ending orchestration');
-      break;
+    // Track errors that occur during tool execution
+    const toolErrors: Error[] = [];
+    
+    // Simulate agent iterations
+    const iterations = Math.min(3, maxIterations); // For simulation, we'll just do a few iterations
+    const toolKeys = Object.keys(tools);
+
+    for (let i = 0; i < iterations; i++) {
+      stepLogger.info(`Executing orchestration iteration ${i + 1}/${iterations}`);
+
+      try {
+        // Simulate agent choosing a tool using the model
+        // In a real implementation, this would use mastra.runAgent() to make a choice
+        const chosenToolKey = toolKeys[i % toolKeys.length];
+        const chosenTool = tools[chosenToolKey];
+
+        if (!chosenTool) {
+          stepLogger.warn(`Tool "${chosenToolKey}" not found in provided tools`);
+          
+          toolErrors.push(new ConfigurationError({
+            message: `Tool "${chosenToolKey}" not found in provided tools`,
+            step: 'Orchestration',
+            details: { 
+              chosenTool: chosenToolKey,
+              availableTools: Object.keys(tools)
+            },
+            suggestions: [
+              "Ensure the tool name matches a key in the tools object",
+              "Check for typos in tool names"
+            ]
+          }));
+          
+          if (!continueOnError) {
+            throw toolErrors[toolErrors.length - 1]; // Throw the error we just created
+          }
+          
+          continue; // Skip to next iteration
+        }
+
+        // Record the tool choice
+        const iterationRecord: OrchestrationIteration = {
+          iteration: i + 1,
+          toolChosen: chosenToolKey,
+          reasoning: `Chose ${chosenToolKey} because it's the next logical step in the research process.`,
+          timestamp: new Date().toISOString(),
+        };
+        
+        currentState.data.orchestration.iterations.push(iterationRecord);
+        stepLogger.debug(`Selected tool: ${chosenToolKey} (iteration ${i + 1})`);
+
+        // Execute the chosen tool with error handling
+        try {
+          stepLogger.info(`Executing tool: ${chosenToolKey}`);
+          const nextState = await chosenTool.execute(currentState);
+          
+          // Preserve our orchestration data structure
+          currentState = {
+            ...nextState,
+            data: {
+              ...nextState.data,
+              orchestration: {
+                ...currentState.data.orchestration,
+              }
+            }
+          };
+          
+          stepLogger.debug(`Tool ${chosenToolKey} executed successfully`);
+        } catch (toolError: unknown) {
+          const errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
+          stepLogger.error(`Error executing tool ${chosenToolKey}: ${errorMessage}`);
+          
+          // Add to tool errors
+          toolErrors.push(
+            toolError instanceof Error ? toolError : new ProcessingError({
+              message: `Tool execution failed: ${errorMessage}`,
+              step: 'Orchestration',
+              details: { 
+                tool: chosenToolKey,
+                iteration: i + 1,
+                error: toolError
+              },
+              retry: false
+            })
+          );
+          
+          // Update iteration record to include error
+          iterationRecord.error = errorMessage;
+          
+          // If we should not continue on error, throw
+          if (!continueOnError) {
+            throw toolErrors[toolErrors.length - 1];
+          }
+          
+          stepLogger.warn(`Continuing to next iteration despite tool error due to continueOnError=true`);
+        }
+
+        // Check exit criteria if provided
+        if (exitCriteria) {
+          try {
+            if (await exitCriteria(currentState)) {
+              stepLogger.info('Exit criteria met, ending orchestration');
+              break;
+            }
+          } catch (criteriaError: unknown) {
+            const errorMessage = criteriaError instanceof Error ? criteriaError.message : String(criteriaError);
+            stepLogger.error(`Error in exit criteria function: ${errorMessage}`);
+            
+            throw new ProcessingError({
+              message: `Exit criteria evaluation failed: ${errorMessage}`,
+              step: 'Orchestration',
+              details: { error: criteriaError },
+              retry: false,
+              suggestions: [
+                "Check the implementation of your exit criteria function",
+                "Ensure it properly handles the state structure",
+                "Add error handling to your exit criteria function"
+              ]
+            });
+          }
+        }
+      } catch (iterationError: unknown) {
+        // This catches errors that weren't handled by continueOnError
+        if (continueOnError) {
+          // If we should continue despite errors, log and continue
+          const errorMessage = iterationError instanceof Error ? iterationError.message : String(iterationError);
+          stepLogger.error(`Error in iteration ${i + 1}: ${errorMessage}`);
+          stepLogger.warn(`Continuing to next iteration due to continueOnError=true`);
+          
+          // If it's not already in toolErrors, add it
+          if (!toolErrors.includes(iterationError as Error)) {
+            toolErrors.push(
+              iterationError instanceof Error ? iterationError : new Error(errorMessage)
+            );
+          }
+        } else {
+          // If we shouldn't continue on errors, rethrow to exit orchestration
+          throw iterationError;
+        }
+      }
     }
-  }
 
-  // Synthesize results (in a real implementation, this would be done by the LLM)
-  const orchestrationResult = {
-    summary: `Completed ${iterations} iterations of orchestrated research for query: ${state.query}`,
-    toolsUsed: currentState.data.orchestration.iterations.map(i => i.toolChosen),
-    confidence: 0.8,
-  };
-
-  // Add the final result
-  if (includeInResults) {
-    return {
-      ...currentState,
-      results: [...currentState.results, orchestrationResult],
+    // Synthesize results (in a real implementation, this would be done by the LLM)
+    const successfulIterations = currentState.data.orchestration.iterations.filter(i => !i.error).length;
+    const totalIterations = currentState.data.orchestration.iterations.length;
+    
+    const orchestrationResult = {
+      summary: `Completed ${totalIterations} iterations of orchestrated research for query: ${state.query}`,
+      toolsUsed: currentState.data.orchestration.iterations.map(i => i.toolChosen),
+      successRate: totalIterations > 0 ? successfulIterations / totalIterations : 0,
+      confidence: 0.8 * (successfulIterations / Math.max(1, totalIterations)), // Scale confidence by success rate
+      errors: toolErrors.length > 0,
+      errorCount: toolErrors.length
     };
-  }
+    
+    stepLogger.info(`Orchestration complete: ${successfulIterations}/${totalIterations} iterations successful`);
+    
+    // Add tool errors to the state errors
+    const finalState = {
+      ...currentState,
+      errors: [
+        ...currentState.errors,
+        ...toolErrors
+      ],
+      metadata: {
+        ...currentState.metadata,
+        orchestrationCompleted: new Date().toISOString(),
+        orchestrationSuccessRate: orchestrationResult.successRate,
+        orchestrationIterations: totalIterations
+      }
+    };
 
-  return currentState;
+    // Add the final result
+    if (includeInResults) {
+      return {
+        ...finalState,
+        results: [...finalState.results, 
+          { 
+            orchestrationResult,
+            iterations: currentState.data.orchestration.iterations.map(i => ({
+              iteration: i.iteration,
+              tool: i.toolChosen,
+              timestamp: i.timestamp,
+              error: i.error || null
+            }))
+          }
+        ],
+      };
+    }
+
+    return finalState;
+  } catch (error: unknown) {
+    // Handle different error types appropriately
+    if (error instanceof ValidationError || 
+        error instanceof ConfigurationError || 
+        error instanceof ProcessingError ||
+        error instanceof LLMError) {
+      // These are already properly formatted, just throw them
+      throw error;
+    }
+    
+    // Otherwise wrap in a generic ProcessingError
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    stepLogger.error(`Orchestration failed: ${errorMessage}`);
+    
+    throw new ProcessingError({
+      message: `Orchestration failed: ${errorMessage}`,
+      step: 'Orchestration',
+      details: { error, options },
+      retry: true,
+      suggestions: [
+        "Check your orchestration configuration",
+        "Verify that all tools are properly implemented",
+        "Ensure the LLM model is properly configured",
+        "Consider setting continueOnError=true to handle tool failures"
+      ]
+    });
+  }
 }
 
 /**
@@ -163,6 +385,13 @@ export function orchestrate(options: OrchestrateOptions): ReturnType<typeof crea
     async (state: ResearchState, opts?: Record<string, any>) => {
       return executeOrchestrationStep(state, options);
     },
-    options
+    options,
+    {
+      // Add retry configuration to the step metadata
+      retryable: true,
+      maxRetries: options.retry?.maxRetries || 2,
+      retryDelay: options.retry?.baseDelay || 1000,
+      backoffFactor: 2
+    }
   );
 }

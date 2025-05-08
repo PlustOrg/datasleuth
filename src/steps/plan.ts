@@ -6,6 +6,13 @@ import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
 import { generateText, LanguageModel } from 'ai';
+import { 
+  ValidationError, 
+  LLMError, 
+  ConfigurationError 
+} from '../types/errors';
+import { logger, createStepLogger } from '../utils/logging';
+import { executeWithRetry } from '../utils/retry';
 
 // Schema for research plan output
 const researchPlanSchema = z.object({
@@ -48,6 +55,13 @@ export interface PlanOptions {
   temperature?: number;
   /** Whether to include the research plan in the final results */
   includeInResults?: boolean;
+  /** Retry configuration */
+  retry?: {
+    /** Maximum number of retries */
+    maxRetries?: number;
+    /** Base delay between retries in ms */
+    baseDelay?: number;
+  };
 }
 
 /**
@@ -57,49 +71,139 @@ async function executePlanStep(
   state: ResearchState,
   options: PlanOptions = {}
 ): Promise<ResearchState> {
+  const stepLogger = createStepLogger('ResearchPlanning');
+  
   const {
     customPrompt = DEFAULT_PLANNING_PROMPT,
     temperature = 0.4,
     includeInResults = true,
     llm,
+    retry = { maxRetries: 2, baseDelay: 1000 }
   } = options;
 
-  // Check for an LLM to use - either from options or from state
-  const modelToUse = llm || state.defaultLLM;
-  
-  // If no LLM is available, throw an error
-  if (!modelToUse) {
-    throw new Error(
-      "No language model provided for planning step. Please provide an LLM either in the step options or as a defaultLLM in the research function."
+  stepLogger.info('Starting research plan generation');
+
+  try {
+    // Check for an LLM to use - either from options or from state
+    const modelToUse = llm || state.defaultLLM;
+    
+    // If no LLM is available, throw an error
+    if (!modelToUse) {
+      throw new ConfigurationError({
+        message: "No language model provided for planning step",
+        step: 'ResearchPlanning',
+        details: { options },
+        suggestions: [
+          "Provide an LLM in the step options using the 'llm' parameter",
+          "Set a defaultLLM when initializing the research function",
+          "Example: research({ defaultLLM: openai('gpt-4'), ... })"
+        ]
+      });
+    }
+
+    const startTime = Date.now();
+    
+    // Generate research plan using the LLM with retry logic
+    const researchPlan = await generateResearchPlanWithLLM(
+      state.query, 
+      customPrompt, 
+      modelToUse, 
+      temperature,
+      retry,
+      stepLogger
     );
-  }
+    
+    const timeTaken = Date.now() - startTime;
+    stepLogger.info(`Research plan generated successfully in ${timeTaken}ms`);
+    stepLogger.debug(`Generated ${researchPlan.searchQueries.length} search queries and ${researchPlan.objectives.length} objectives`);
 
-  // Generate research plan using the LLM
-  const researchPlan = await generateResearchPlanWithLLM(
-    state.query, 
-    customPrompt, 
-    modelToUse, 
-    temperature
-  );
-
-  // Store the plan in state for later steps to use
-  const newState = {
-    ...state,
-    data: {
-      ...state.data,
-      researchPlan,
-    },
-  };
-
-  // Add the plan to results if requested
-  if (includeInResults) {
-    return {
-      ...newState,
-      results: [...newState.results, researchPlan],
+    // Store the plan in state for later steps to use
+    const newState = {
+      ...state,
+      data: {
+        ...state.data,
+        researchPlan,
+      },
+      metadata: {
+        ...state.metadata,
+        planningTimeMs: timeTaken
+      }
     };
-  }
 
-  return newState;
+    // Add the plan to results if requested
+    if (includeInResults) {
+      return {
+        ...newState,
+        results: [...newState.results, { researchPlan }],
+      };
+    }
+
+    return newState;
+  } catch (error: unknown) {
+    // Handle specific error types
+    if (error instanceof ValidationError || 
+        error instanceof LLMError || 
+        error instanceof ConfigurationError) {
+      // These are already properly formatted errors, just throw them
+      throw error;
+    }
+    
+    // Handle generic errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    stepLogger.error(`Error during research planning: ${errorMessage}`);
+    
+    // Check error patterns to create appropriate error types
+    if (errorMessage.includes('JSON') || errorMessage.includes('parse')) {
+      throw new LLMError({
+        message: `Failed to parse LLM response as valid JSON during planning: ${errorMessage}`,
+        step: 'ResearchPlanning', 
+        details: { error },
+        retry: true,
+        suggestions: [
+          "Verify the prompt is properly constructed to elicit JSON",
+          "Try a different model that produces more reliable structured output",
+          "Consider using a different temperature value"
+        ]
+      });
+    } else if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
+      throw new LLMError({
+        message: `LLM context length exceeded during planning: ${errorMessage}`,
+        step: 'ResearchPlanning',
+        details: { error },
+        retry: false,
+        suggestions: [
+          "Simplify the query",
+          "Use a model with larger context window",
+          "Reduce the customPrompt length"
+        ]
+      });
+    } else if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
+      throw new LLMError({
+        message: `LLM rate limit exceeded during planning: ${errorMessage}`,
+        step: 'ResearchPlanning',
+        details: { error },
+        retry: true,
+        suggestions: [
+          "Wait and try again later",
+          "Implement request throttling in your application",
+          "Consider using a different LLM provider or API key"
+        ]
+      });
+    }
+    
+    // Generic LLM error fallback
+    throw new LLMError({
+      message: `Error during research planning: ${errorMessage}`,
+      step: 'ResearchPlanning',
+      details: { originalError: error },
+      retry: true,
+      suggestions: [
+        "Check your LLM configuration",
+        "Verify API key and model availability",
+        "The LLM service might be experiencing issues, try again later"
+      ]
+    });
+  }
 }
 
 /**
@@ -109,42 +213,118 @@ async function generateResearchPlanWithLLM(
   query: string, 
   systemPrompt: string, 
   llm: LanguageModel,
-  temperature: number
+  temperature: number,
+  retry?: { maxRetries?: number; baseDelay?: number },
+  stepLogger?: ReturnType<typeof createStepLogger>
 ): Promise<ResearchPlan> {
-  try {
-    // Generate the research plan using the AI SDK
-    const { text } = await generateText({
-      model: llm,
-      system: systemPrompt,
-      prompt: `Create a detailed research plan for the query: "${query}"
-      
-      Output the research plan in JSON format matching this structure:
-      {
-        "objectives": ["objective 1", "objective 2", ...],
-        "searchQueries": ["query 1", "query 2", ...],
-        "relevantFactors": ["factor 1", "factor 2", ...],
-        "dataGatheringStrategy": "Detailed strategy description",
-        "expectedOutcomes": ["outcome 1", "outcome 2", ...]
-      }
-      
-      Make sure to format the output as valid JSON.`,
-      temperature,
-    });
+  // Use default logger if stepLogger not provided
+  const logger = stepLogger || createStepLogger('ResearchPlanning');
+  
+  return executeWithRetry(
+    async () => {
+      try {
+        logger.debug(`Generating research plan for query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`);
+        
+        // Generate the research plan using the AI SDK
+        const { text } = await generateText({
+          model: llm,
+          system: systemPrompt,
+          prompt: `Create a detailed research plan for the query: "${query}"
+          
+          Output the research plan in JSON format matching this structure:
+          {
+            "objectives": ["objective 1", "objective 2", ...],
+            "searchQueries": ["query 1", "query 2", ...],
+            "relevantFactors": ["factor 1", "factor 2", ...],
+            "dataGatheringStrategy": "Detailed strategy description",
+            "expectedOutcomes": ["outcome 1", "outcome 2", ...]
+          }
+          
+          Make sure to format the output as valid JSON.`,
+          temperature,
+        });
 
-    // Parse the JSON response
-    try {
-      const parsedPlan = JSON.parse(text);
-      return researchPlanSchema.parse(parsedPlan);
-    } catch (parseError) {
-      console.error('Failed to parse LLM response as valid JSON:', parseError);
-      console.debug('Raw LLM response:', text);
-      throw new Error('LLM response was not valid JSON for research plan');
+        // Parse the JSON response
+        try {
+          logger.debug('Received response from LLM, parsing JSON');
+          const parsedPlan = JSON.parse(text);
+          
+          // Validate against schema
+          try {
+            const validatedPlan = researchPlanSchema.parse(parsedPlan);
+            logger.debug(`Successfully validated research plan with ${validatedPlan.searchQueries.length} search queries`);
+            return validatedPlan;
+          } catch (validationError) {
+            logger.error(`LLM response failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`);
+            logger.debug(`Invalid plan structure: ${JSON.stringify(parsedPlan)}`);
+            
+            throw new ValidationError({
+              message: `Research plan failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`,
+              step: 'ResearchPlanning',
+              details: { 
+                parsedResponse: parsedPlan,
+                validationError,
+                schema: researchPlanSchema.toString()
+              },
+              retry: true,
+              suggestions: [
+                "Check if the LLM is following the requested JSON structure",
+                "Verify that required fields are being generated",
+                "Consider simplifying the schema requirements"
+              ]
+            });
+          }
+        } catch (parseError) {
+          logger.error(`Failed to parse LLM response as valid JSON`);
+          logger.debug(`Raw LLM response: ${text}`);
+          
+          throw new LLMError({
+            message: 'LLM response was not valid JSON for research plan',
+            step: 'ResearchPlanning',
+            details: { 
+              rawResponse: text, 
+              parseError 
+            },
+            retry: true,
+            suggestions: [
+              "Verify the prompt is properly instructing the model to return valid JSON",
+              "Try a different model that produces more reliable structured output",
+              "Consider adjusting the temperature value to get more consistent output"
+            ]
+          });
+        }
+      } catch (error: unknown) {
+        // If it's already one of our error types, just rethrow it
+        if (error instanceof ValidationError || error instanceof LLMError) {
+          throw error;
+        }
+        
+        // Otherwise wrap in LLMError
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Error generating research plan with LLM: ${errorMessage}`);
+        
+        throw new LLMError({
+          message: `Failed to generate research plan: ${errorMessage}`,
+          step: 'ResearchPlanning',
+          details: { error, query },
+          retry: true,
+          suggestions: [
+            "Check your LLM configuration",
+            "Verify API key and model availability",
+            "The model may be experiencing issues, try again later"
+          ]
+        });
+      }
+    },
+    {
+      maxRetries: retry?.maxRetries ?? 2,
+      retryDelay: retry?.baseDelay ?? 1000,
+      backoffFactor: 2,
+      onRetry: (attempt, error, delay) => {
+        logger.warn(`Retry attempt ${attempt} for research plan: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
+      }
     }
-  } catch (error: unknown) {
-    console.error('Error generating research plan with LLM:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to generate research plan: ${errorMessage}`);
-  }
+  );
 }
 
 /**
@@ -154,5 +334,18 @@ async function generateResearchPlanWithLLM(
  * @returns A planning step for the research pipeline
  */
 export function plan(options: PlanOptions = {}): ReturnType<typeof createStep> {
-  return createStep('ResearchPlanning', executePlanStep, options);
+  return createStep(
+    'ResearchPlanning', 
+    async (state: ResearchState, opts?: Record<string, any>) => {
+      return executePlanStep(state, options);
+    }, 
+    options,
+    {
+      // Mark as retryable by default for the entire step
+      retryable: true,
+      maxRetries: 2,
+      retryDelay: 1000,
+      backoffFactor: 2
+    }
+  );
 }

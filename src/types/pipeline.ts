@@ -45,7 +45,8 @@ export interface ExtractedContent {
   title: string;
   content: string;
   extractionDate: string;
-  selector?: string;
+  /** Additional metadata about the extraction */
+  metadata?: Record<string, any>;
 }
 
 /**

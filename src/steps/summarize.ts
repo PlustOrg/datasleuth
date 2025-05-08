@@ -8,6 +8,14 @@ import { ResearchState, ExtractedContent, FactCheckResult } from '../types/pipel
 import { StepOptions } from '../types/pipeline';
 import { z } from 'zod';
 import { generateText, LanguageModel } from 'ai';
+import { 
+  ValidationError, 
+  ConfigurationError, 
+  LLMError,
+  ProcessingError 
+} from '../types/errors';
+import { logger, createStepLogger } from '../utils/logging';
+import { executeWithRetry } from '../utils/retry';
 
 /**
  * Format options for summary output
@@ -36,6 +44,13 @@ export interface SummarizeOptions extends StepOptions {
   customPrompt?: string;
   /** Additional instructions for summary generation */
   additionalInstructions?: string;
+  /** Retry configuration for LLM calls */
+  retry?: {
+    /** Maximum number of retries */
+    maxRetries?: number;
+    /** Base delay between retries in ms */
+    baseDelay?: number;
+  };
 }
 
 /**
@@ -62,6 +77,8 @@ async function executeSummarizeStep(
   state: ResearchState,
   options: SummarizeOptions
 ): Promise<ResearchState> {
+  const stepLogger = createStepLogger('Summarization');
+  
   const {
     maxLength = 2000,
     llm,
@@ -72,82 +89,200 @@ async function executeSummarizeStep(
     includeInResults = true,
     customPrompt,
     additionalInstructions,
+    retry = { maxRetries: 2, baseDelay: 1000 }
   } = options;
 
-  // Get content to summarize
-  const contentToSummarize: string[] = [];
+  stepLogger.info('Starting content summarization');
   
-  // Add extracted content if available
-  if (state.data.extractedContent) {
-    contentToSummarize.push(...state.data.extractedContent.map((item: ExtractedContent) => item.content));
-  }
-  
-  // Add research plan if available
-  if (state.data.researchPlan) {
-    contentToSummarize.push(JSON.stringify(state.data.researchPlan));
-  }
-  
-  // Add factual information if available
-  if (state.data.factChecks) {
-    const validFactChecks = state.data.factChecks.filter((check: FactCheckResult) => check.isValid);
-    contentToSummarize.push(...validFactChecks.map((check: FactCheckResult) => check.statement));
-  }
-  
-  if (contentToSummarize.length === 0) {
-    console.warn('No content found for summarization');
-    return state;
-  }
+  try {
+    // Validate temperature
+    if (temperature < 0 || temperature > 1) {
+      throw new ValidationError({
+        message: `Invalid temperature value: ${temperature}. Must be between 0 and 1.`,
+        step: 'Summarization',
+        details: { temperature },
+        suggestions: [
+          "Temperature must be between 0.0 and 1.0",
+          "Lower values (0.0-0.3) provide more consistent summaries",
+          "Higher values (0.7-1.0) provide more creative summaries"
+        ]
+      });
+    }
+    
+    // Validate maximum length
+    if (maxLength <= 0) {
+      throw new ValidationError({
+        message: `Invalid maxLength value: ${maxLength}. Must be greater than 0.`,
+        step: 'Summarization',
+        details: { maxLength },
+        suggestions: [
+          "Maximum length must be a positive number",
+          "Recommended values are between 500-5000 characters"
+        ]
+      });
+    }
+    
+    // Get content to summarize
+    const contentToSummarize: string[] = [];
+    
+    // Add extracted content if available
+    if (state.data.extractedContent) {
+      contentToSummarize.push(...state.data.extractedContent.map((item: ExtractedContent) => item.content));
+    }
+    
+    // Add research plan if available
+    if (state.data.researchPlan) {
+      contentToSummarize.push(JSON.stringify(state.data.researchPlan));
+    }
+    
+    // Add factual information if available
+    if (state.data.factChecks) {
+      const validFactChecks = state.data.factChecks.filter((check: FactCheckResult) => check.isValid);
+      contentToSummarize.push(...validFactChecks.map((check: FactCheckResult) => check.statement));
+    }
+    
+    if (contentToSummarize.length === 0) {
+      stepLogger.warn('No content found for summarization');
+      return {
+        ...state,
+        metadata: {
+          ...state.metadata,
+          warnings: [
+            ...(state.metadata.warnings || []),
+            'Summarization step skipped due to lack of content.'
+          ]
+        }
+      };
+    }
 
-  console.log(`Summarizing ${contentToSummarize.length} content items...`);
-  
-  // Normalize focus to array if it's a string
-  const focusArray = typeof focus === 'string' ? [focus] : focus;
-  
-  // Check for an LLM to use - either from options or from state
-  const modelToUse = llm || state.defaultLLM;
-  
-  // If no LLM is available, throw an error
-  if (!modelToUse) {
-    throw new Error(
-      "No language model provided for summarization step. Please provide an LLM either in the step options or as a defaultLLM in the research function."
+    stepLogger.info(`Summarizing ${contentToSummarize.length} content items`);
+    stepLogger.debug(`Format: ${format}, max length: ${maxLength}, include citations: ${includeCitations}`);
+    
+    // Normalize focus to array if it's a string
+    const focusArray = typeof focus === 'string' ? [focus] : focus;
+    
+    // Check for an LLM to use - either from options or from state
+    const modelToUse = llm || state.defaultLLM;
+    
+    // If no LLM is available, throw an error
+    if (!modelToUse) {
+      throw new ConfigurationError({
+        message: "No language model provided for summarization step",
+        step: 'Summarization',
+        details: { options },
+        suggestions: [
+          "Provide an LLM in the step options using the 'llm' parameter",
+          "Set a defaultLLM when initializing the research function",
+          "Example: research({ defaultLLM: openai('gpt-4'), ... })"
+        ]
+      });
+    }
+
+    // Generate summary using the provided LLM with retry logic
+    const summary = await executeWithRetry(
+      () => generateSummaryWithLLM(
+        contentToSummarize,
+        state.query,
+        maxLength,
+        format,
+        focusArray,
+        includeCitations,
+        additionalInstructions,
+        modelToUse,
+        temperature,
+        customPrompt
+      ),
+      {
+        maxRetries: retry.maxRetries ?? 2,
+        retryDelay: retry.baseDelay ?? 1000,
+        backoffFactor: 2,
+        onRetry: (attempt, error, delay) => {
+          stepLogger.warn(`Retry attempt ${attempt} for summarization: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
+        }
+      }
     );
-  }
-
-  // Generate summary using the provided LLM
-  const summary = await generateSummaryWithLLM(
-    contentToSummarize,
-    state.query,
-    maxLength,
-    format,
-    focusArray,
-    includeCitations,
-    additionalInstructions,
-    modelToUse,
-    temperature,
-    customPrompt
-  );
-  
-  // Update state with summary
-  const newState = {
-    ...state,
-    data: {
-      ...state.data,
-      summary,
-    },
-  };
-
-  // Add to results if requested
-  if (includeInResults) {
-    return {
-      ...newState,
-      results: [
-        ...newState.results,
-        { summary },
-      ],
+    
+    stepLogger.info(`Summary generated successfully (${summary.length} characters)`);
+    
+    // Update state with summary
+    const newState = {
+      ...state,
+      data: {
+        ...state.data,
+        summary,
+      },
+      metadata: {
+        ...state.metadata,
+        summaryLength: summary.length,
+        summaryFormat: format
+      }
     };
-  }
 
-  return newState;
+    // Add to results if requested
+    if (includeInResults) {
+      return {
+        ...newState,
+        results: [
+          ...newState.results,
+          { summary },
+        ],
+      };
+    }
+
+    return newState;
+  } catch (error: unknown) {
+    // Handle different error types appropriately
+    if (error instanceof ValidationError || 
+        error instanceof LLMError || 
+        error instanceof ConfigurationError) {
+      // These are already properly formatted, just throw them
+      throw error;
+    }
+    
+    // Handle generic errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    stepLogger.error(`Error during summarization: ${errorMessage}`);
+    
+    // Check for specific error patterns
+    if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
+      throw new LLMError({
+        message: `LLM context length exceeded during summarization: ${errorMessage}`,
+        step: 'Summarization',
+        details: { error },
+        retry: false,
+        suggestions: [
+          "Reduce the amount of content being summarized",
+          "Use a model with larger context window",
+          "Consider breaking the summarization into multiple steps"
+        ]
+      });
+    } else if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
+      throw new LLMError({
+        message: `LLM rate limit exceeded during summarization: ${errorMessage}`,
+        step: 'Summarization',
+        details: { error },
+        retry: true,
+        suggestions: [
+          "Wait and try again later",
+          "Consider using a different LLM provider",
+          "Implement rate limiting in your application"
+        ]
+      });
+    }
+    
+    // Generic processing error
+    throw new ProcessingError({
+      message: `Summarization failed: ${errorMessage}`,
+      step: 'Summarization',
+      details: { error, options },
+      retry: true,
+      suggestions: [
+        "Check your summarization configuration",
+        "Try with a smaller set of content",
+        "Consider using a different LLM provider or model"
+      ]
+    });
+  }
 }
 
 /**
@@ -165,6 +300,8 @@ async function generateSummaryWithLLM(
   temperature: number,
   customPrompt?: string
 ): Promise<string> {
+  const logger = createStepLogger('SummaryGenerator');
+  
   try {
     // Prepare the content to summarize (limit to avoid token limits)
     const contentText = contentItems.join('\n\n').slice(0, 15000);
@@ -217,6 +354,8 @@ ${extraInstructions}
 Keep your summary under ${maxLength} characters.
 `;
 
+    logger.debug(`Generating summary with ${format} format, maxLength: ${maxLength}`);
+    
     // Generate the summary using the AI SDK
     const { text } = await generateText({
       model: llm,
@@ -226,16 +365,59 @@ Keep your summary under ${maxLength} characters.
       maxTokens: Math.floor(maxLength / 4), // rough character to token conversion
     });
 
+    logger.debug(`Summary generated with ${text.length} characters`);
+    
     // Ensure we don't exceed the max length
     return text.length > maxLength 
       ? text.substring(0, maxLength - 3) + '...' 
       : text;
   } catch (error: unknown) {
-    console.error('Error generating summary with LLM:', error);
+    logger.error(`Error generating summary with LLM: ${error instanceof Error ? error.message : String(error)}`);
+    
+    // Format the error for better handling
     const errorMessage = error instanceof Error ? error.message : String(error);
     
-    // Return a basic error summary
-    return `Error generating summary: ${errorMessage}. Please try again with a different model or configuration.`;
+    // Check for specific error patterns and throw appropriate errors
+    if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
+      throw new LLMError({
+        message: `LLM context length exceeded: ${errorMessage}`,
+        step: 'Summarization',
+        details: { error, contentLength: contentItems.join('\n\n').length },
+        retry: false,
+        suggestions: [
+          "Reduce the amount of content being summarized",
+          "Use a model with larger context window",
+          "Break the content into smaller chunks"
+        ]
+      });
+    }
+    
+    if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
+      throw new LLMError({
+        message: `LLM rate limit exceeded: ${errorMessage}`,
+        step: 'Summarization',
+        details: { error },
+        retry: true,
+        suggestions: [
+          "Wait and try again later",
+          "Implement request throttling in your application",
+          "Consider using a different LLM provider or API key"
+        ]
+      });
+    }
+    
+    // Generic LLM error
+    throw new LLMError({
+      message: `Error generating summary: ${errorMessage}`,
+      step: 'Summarization',
+      details: { error },
+      retry: true,
+      suggestions: [
+        "Check your LLM configuration",
+        "Verify API key and model availability",
+        "The LLM service might be experiencing issues, try again later"
+      ]
+    });
   }
 }
 
@@ -251,6 +433,13 @@ export function summarize(options: SummarizeOptions = {}): ReturnType<typeof cre
     async (state: ResearchState, opts?: StepOptions) => {
       return executeSummarizeStep(state, options);
     }, 
-    options
+    options,
+    {
+      // Mark as retryable by default for the entire step
+      retryable: true,
+      maxRetries: options.retry?.maxRetries || 2,
+      retryDelay: options.retry?.baseDelay || 1000,
+      backoffFactor: 2
+    }
   );
 }

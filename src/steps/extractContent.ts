@@ -5,8 +5,15 @@
 import { createStep } from '../utils/steps';
 import { ResearchState, ExtractedContent as StateExtractedContent, SearchResult } from '../types/pipeline';
 import { StepOptions } from '../types/pipeline';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import * as cheerio from 'cheerio';
+import { 
+  ExtractionError, 
+  NetworkError, 
+  ValidationError,
+  ConfigurationError 
+} from '../types/errors';
+import { logger, createStepLogger } from '../utils/logging';
 
 /**
  * Options for the content extraction step
@@ -31,6 +38,12 @@ export interface ExtractContentOptions extends StepOptions {
     /** Base delay between retries in ms */
     baseDelay?: number;
   };
+  /** Minimum content length to consider a successful extraction */
+  minContentLength?: number;
+  /** Whether to continue if some URLs fail to extract */
+  continueOnError?: boolean;
+  /** Whether to require at least one successful extraction */
+  requireSuccessful?: boolean;
 }
 
 /**
@@ -51,6 +64,10 @@ export interface ExtractedContentMetadata {
   matchedSelectors?: string[];
   /** Was this a complete extraction or partial */
   isComplete?: boolean;
+  /** Extraction time in milliseconds */
+  extractionTimeMs?: number;
+  /** Number of retry attempts made */
+  retryAttempts?: number;
 }
 
 /**
@@ -76,70 +93,264 @@ async function executeExtractContentStep(
   state: ResearchState,
   options: ExtractContentOptions
 ): Promise<ResearchState> {
+  const stepLogger = createStepLogger('ContentExtraction');
+  
   const {
     selectors: explicitSelectors,
     selector,
     maxUrls = 5,
     maxContentLength = 10000,
+    minContentLength = 100,
     includeInResults = false,
     timeout = 10000,
     retry = { maxRetries: 2, baseDelay: 500 },
+    continueOnError = true,
+    requireSuccessful = false
   } = options;
   
   // Use selectors if provided, otherwise use selector (alias), or fall back to default
   const selectors = explicitSelectors || selector || 'article, .content, main, #content, .article, .post';
 
-  // Get search results from state
-  const searchResults = state.data.searchResults || [];
+  stepLogger.info('Starting content extraction execution');
+  stepLogger.debug(`Using selectors: ${selectors}`);
   
-  if (searchResults.length === 0) {
-    console.warn('No search results found for content extraction');
-    return state;
-  }
-
-  // Extract content from each URL (up to maxUrls)
-  const urlsToProcess = searchResults.slice(0, maxUrls);
-  const extractedContents: StateExtractedContent[] = [];
-
-  // Process each URL and extract content
-  for (const result of urlsToProcess) {
-    try {
-      const extractedContent = await extractContentFromURL(
-        result.url,
-        result.title || '',
-        selectors,
-        maxContentLength,
-        timeout,
-        { 
-          maxRetries: retry.maxRetries ?? 2,  // Ensure non-undefined values
-          baseDelay: retry.baseDelay ?? 500
-        }
-      );
+  try {
+    // Get search results from state
+    const searchResults = state.data.searchResults || [];
+    
+    if (searchResults.length === 0) {
+      stepLogger.warn('No search results found for content extraction');
       
-      extractedContents.push(extractedContent);
-    } catch (error) {
-      console.error(`Failed to extract content from ${result.url}:`, error);
+      if (requireSuccessful) {
+        throw new ValidationError({
+          message: 'No search results available for content extraction',
+          step: 'ContentExtraction',
+          suggestions: [
+            "Ensure the search step runs successfully before content extraction",
+            "Check if search step is returning results",
+            "Consider making this step optional if search results are not guaranteed"
+          ]
+        });
+      }
+      
+      return state;
     }
-  }
 
-  // Update state with extracted content
-  const newState = {
-    ...state,
-    data: {
-      ...state.data,
-      extractedContent: extractedContents,
-    },
-  };
+    // Extract content from each URL (up to maxUrls)
+    const urlsToProcess = searchResults.slice(0, maxUrls);
+    const extractedContents: StateExtractedContent[] = [];
+    const failedUrls: Array<{url: string; reason: string}> = [];
 
-  // Add to results if requested
-  if (includeInResults) {
-    return {
-      ...newState,
-      results: [...newState.results, { extractedContent: extractedContents }],
+    stepLogger.info(`Processing ${urlsToProcess.length} URLs for content extraction`);
+    
+    // Process each URL and extract content
+    for (const result of urlsToProcess) {
+      try {
+        stepLogger.debug(`Extracting content from: ${result.url}`);
+        const startTime = Date.now();
+        
+        const extractedContent = await extractContentFromURL(
+          result.url,
+          result.title || '',
+          selectors,
+          maxContentLength,
+          timeout,
+          { 
+            maxRetries: retry.maxRetries ?? 2,
+            baseDelay: retry.baseDelay ?? 500
+          },
+          stepLogger
+        );
+        
+        const extractionTime = Date.now() - startTime;
+        
+        // Ensure content meets minimum length requirement
+        if (extractedContent.content.length < minContentLength) {
+          stepLogger.warn(`Extracted content from ${result.url} is too short (${extractedContent.content.length} chars), skipping`);
+          failedUrls.push({
+            url: result.url,
+            reason: `Content too short (${extractedContent.content.length} chars)`
+          });
+          continue;
+        }
+        
+        // Add extraction time to metadata
+        if (extractedContent.metadata) {
+          extractedContent.metadata.extractionTimeMs = extractionTime;
+        }
+        
+        stepLogger.info(`Successfully extracted ${extractedContent.content.length} chars from ${result.url} in ${extractionTime}ms`);
+        extractedContents.push(extractedContent);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        stepLogger.error(`Failed to extract content from ${result.url}: ${errorMessage}`);
+        
+        failedUrls.push({
+          url: result.url,
+          reason: errorMessage
+        });
+        
+        // If we should not continue on error, throw
+        if (!continueOnError) {
+          // Determine error type for better error handling
+          if (error instanceof NetworkError) {
+            throw error; // Already a NetworkError
+          } else if (error instanceof Error && (error.message.includes('ECONNREFUSED') || 
+                                               error.message.includes('ETIMEDOUT') ||
+                                               error.message.includes('network'))) {
+            throw new NetworkError({
+              message: `Network error extracting content from ${result.url}: ${error.message}`,
+              step: 'ContentExtraction',
+              details: { url: result.url, originalError: error },
+              retry: true,
+              suggestions: [
+                "Check your internet connection",
+                "Verify the URL is accessible",
+                "Try increasing the timeout value",
+                "The website might be blocking requests, consider using a different approach"
+              ]
+            });
+          } else {
+            // Generic extraction error
+            throw new ExtractionError({
+              message: `Failed to extract content from ${result.url}: ${errorMessage}`,
+              step: 'ContentExtraction',
+              details: { url: result.url, originalError: error },
+              retry: false,
+              suggestions: [
+                "Check if the website structure supports content extraction",
+                "Try different CSS selectors",
+                "The website might be using JavaScript to render content, which simple extraction can't handle"
+              ]
+            });
+          }
+        }
+      }
+    }
+
+    // Check if we have extracted any content
+    if (extractedContents.length === 0 && requireSuccessful) {
+      throw new ExtractionError({
+        message: 'Failed to extract content from any of the provided URLs',
+        step: 'ContentExtraction',
+        details: { failedUrls },
+        retry: false,
+        suggestions: [
+          "Check if the websites are accessible",
+          "Try different CSS selectors",
+          "The websites might be using JavaScript to render content",
+          "Consider using a more robust extraction method"
+        ]
+      });
+    }
+
+    // Calculate statistics
+    const successRate = extractedContents.length / urlsToProcess.length;
+    const totalContentLength = extractedContents.reduce((sum, item) => sum + item.content.length, 0);
+    const avgContentLength = extractedContents.length > 0 ? totalContentLength / extractedContents.length : 0;
+    
+    stepLogger.info(`Extraction complete: ${extractedContents.length}/${urlsToProcess.length} URLs successful (${(successRate * 100).toFixed(1)}%)`);
+    stepLogger.debug(`Average content length: ${avgContentLength.toFixed(0)} characters`);
+
+    // Update state with extracted content and metadata
+    const newState = {
+      ...state,
+      data: {
+        ...state.data,
+        extractedContent: extractedContents,
+        extractionMetadata: {
+          totalProcessed: urlsToProcess.length,
+          successful: extractedContents.length,
+          failed: failedUrls.length,
+          failedUrls,
+          successRate,
+          totalContentLength,
+          avgContentLength,
+          timestamp: new Date().toISOString()
+        }
+      },
     };
-  }
 
-  return newState;
+    // Add to results if requested
+    if (includeInResults) {
+      return {
+        ...newState,
+        results: [...newState.results, { 
+          extractedContent: extractedContents,
+          extractionStats: {
+            successRate,
+            totalContentLength,
+            avgContentLength,
+            successful: extractedContents.length,
+            failed: failedUrls.length
+          }
+        }],
+      };
+    }
+
+    return newState;
+  } catch (error: unknown) {
+    // Handle specific error types
+    if (error instanceof NetworkError || error instanceof ExtractionError || error instanceof ValidationError) {
+      // These are already properly formatted, just throw them
+      throw error;
+    } else if (error instanceof AxiosError) {
+      // Format Axios errors specifically
+      const status = error.response?.status;
+      const isNetworkError = !error.response || error.code === 'ECONNABORTED' || error.message.includes('timeout');
+      
+      if (isNetworkError) {
+        throw new NetworkError({
+          message: `Network error during content extraction: ${error.message}`,
+          step: 'ContentExtraction',
+          details: { error: error, url: error.config?.url },
+          retry: true,
+          suggestions: [
+            "Check your internet connection",
+            "Verify the URLs are accessible",
+            "Try increasing the timeout value"
+          ]
+        });
+      } else if (status && status >= 400 && status < 500) {
+        throw new ExtractionError({
+          message: `Client error (${status}) during content extraction: ${error.message}`,
+          step: 'ContentExtraction',
+          details: { error: error, status, url: error.config?.url },
+          retry: false,
+          suggestions: [
+            status === 403 ? "The website is blocking access, consider using a different approach" : 
+            status === 404 ? "The URL does not exist or has been moved" :
+            "Check if the URL is correct and accessible"
+          ]
+        });
+      } else if (status && status >= 500) {
+        throw new ExtractionError({
+          message: `Server error (${status}) during content extraction: ${error.message}`,
+          step: 'ContentExtraction',
+          details: { error: error, status, url: error.config?.url },
+          retry: true,
+          suggestions: [
+            "The website server is experiencing issues",
+            "Try again later",
+            "Consider using a different source for information"
+          ]
+        });
+      }
+    }
+    
+    // Generic error handling
+    throw new ExtractionError({
+      message: `Error during content extraction: ${error instanceof Error ? error.message : String(error)}`,
+      step: 'ContentExtraction',
+      details: { originalError: error },
+      retry: false,
+      suggestions: [
+        "Check configuration parameters",
+        "Verify URL formats",
+        "Inspect the error details for more specific guidance"
+      ]
+    });
+  }
 }
 
 /**
@@ -151,10 +362,26 @@ async function extractContentFromURL(
   selectors: string,
   maxLength: number,
   timeout: number,
-  retry: { maxRetries: number; baseDelay: number }
+  retry: { maxRetries: number; baseDelay: number },
+  stepLogger: ReturnType<typeof createStepLogger>
 ): Promise<StateExtractedContent> {
   let retries = 0;
   let lastError: Error | null = null;
+  
+  // Validate URL
+  try {
+    new URL(url); // Will throw if invalid
+  } catch (error) {
+    throw new ValidationError({
+      message: `Invalid URL format: ${url}`,
+      step: 'ContentExtraction',
+      details: { url, error },
+      suggestions: [
+        "Check URL format, must be a valid absolute URL",
+        "Ensure URL includes protocol (http:// or https://)"
+      ]
+    });
+  }
   
   // Attempt with retries
   while (retries <= retry.maxRetries) {
@@ -163,10 +390,11 @@ async function extractContentFromURL(
       if (retries > 0) {
         const delayTime = retry.baseDelay * Math.pow(2, retries - 1); // Exponential backoff
         await new Promise(resolve => setTimeout(resolve, delayTime));
-        console.log(`Retrying ${url} (attempt ${retries} of ${retry.maxRetries})...`);
+        stepLogger.debug(`Retrying ${url} (attempt ${retries} of ${retry.maxRetries}, delay: ${delayTime}ms)...`);
       }
       
       // Fetch the content
+      const startFetch = Date.now();
       const response = await axios.get(url, {
         timeout,
         headers: {
@@ -177,6 +405,21 @@ async function extractContentFromURL(
         maxRedirects: 5,
         validateStatus: status => status < 400 // Only allow status codes less than 400
       });
+      const fetchTime = Date.now() - startFetch;
+      
+      // Check content type
+      const contentType = response.headers['content-type'] || '';
+      if (!contentType.includes('html') && !contentType.includes('text')) {
+        throw new ExtractionError({
+          message: `Unsupported content type: ${contentType}`,
+          step: 'ContentExtraction',
+          details: { url, contentType },
+          suggestions: [
+            "This URL points to non-HTML content that cannot be extracted",
+            "Try a different URL that contains HTML content"
+          ]
+        });
+      }
       
       // Load the HTML into cheerio
       const $ = cheerio.load(response.data);
@@ -229,6 +472,7 @@ async function extractContentFromURL(
         .trim();
       
       // Truncate if necessary
+      const isComplete = content.length <= maxLength;
       const finalContent = content.length > maxLength 
         ? content.substring(0, maxLength) + '...' 
         : content;
@@ -242,23 +486,80 @@ async function extractContentFromURL(
       // Calculate word count (approximate)
       const wordCount = finalContent.split(/\s+/).filter(Boolean).length;
       
-      // Return the extracted content
-      // Note: We're not adding metadata as it's not in the StateExtractedContent interface
+      // Create metadata
+      const metadata: ExtractedContentMetadata = {
+        wordCount,
+        domain,
+        statusCode: response.status,
+        contentType: response.headers['content-type'],
+        extractedAt,
+        matchedSelectors,
+        isComplete,
+        retryAttempts: retries
+      };
+      
+      // Return the extracted content with proper metadata
       return {
         url,
         title,
         content: finalContent,
-        extractionDate: extractedAt,
-        selector: selectors
+        extractedAt,
+        metadata
       };
       
     } catch (error) {
       lastError = error as Error;
       retries++;
       
-      // If we've exhausted all retries, throw the last error
+      // Log retry information
+      if (retries <= retry.maxRetries) {
+        stepLogger.warn(`Extraction attempt ${retries} failed for ${url}: ${lastError.message}`);
+      }
+      
+      // If we've exhausted all retries, format and throw appropriate error
       if (retries > retry.maxRetries) {
-        throw new Error(`Failed to extract content from ${url} after ${retry.maxRetries} retries: ${lastError.message}`);
+        if (error instanceof AxiosError) {
+          if (!error.response || error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+            throw new NetworkError({
+              message: `Network error fetching ${url} after ${retry.maxRetries} retries: ${lastError.message}`,
+              step: 'ContentExtraction',
+              details: { url, error, attempts: retries },
+              retry: true,
+              suggestions: [
+                "Check your internet connection",
+                "The website may be temporarily unavailable",
+                "Try increasing the timeout value",
+                "Consider using a different URL"
+              ]
+            });
+          } else if (error.response && error.response.status >= 400) {
+            throw new ExtractionError({
+              message: `HTTP error (${error.response.status}) fetching ${url} after ${retry.maxRetries} retries`,
+              step: 'ContentExtraction',
+              details: { url, status: error.response.status, error },
+              retry: error.response.status >= 500, // Server errors can be retried, client errors usually can't
+              suggestions: [
+                error.response.status === 403 ? "The website is blocking access, consider using a different source" :
+                error.response.status === 404 ? "The URL does not exist or has been moved" :
+                error.response.status >= 500 ? "The website server is experiencing issues, try again later" :
+                "Check if the URL is correct and accessible"
+              ]
+            });
+          }
+        }
+        
+        // For other errors, use a generic ExtractionError
+        throw new ExtractionError({
+          message: `Failed to extract content from ${url} after ${retry.maxRetries} retries: ${lastError.message}`,
+          step: 'ContentExtraction',
+          details: { url, error: lastError, attempts: retries },
+          retry: false,
+          suggestions: [
+            "Try different CSS selectors",
+            "The website might be using JavaScript to render content",
+            "Consider using a more robust extraction method"
+          ]
+        });
       }
     }
   }
@@ -275,11 +576,21 @@ async function extractContentFromURL(
  * @returns A content extraction step for the research pipeline
  */
 export function extractContent(options: ExtractContentOptions = {}): ReturnType<typeof createStep> {
-  return createStep('ContentExtraction', 
+  return createStep(
+    'ContentExtraction', 
     // Wrapper function that matches the expected signature
     async (state: ResearchState, opts?: StepOptions) => {
       return executeExtractContentStep(state, options);
     }, 
-    options
+    options,
+    {
+      // Mark as retryable by default for the entire step
+      retryable: true,
+      maxRetries: options.retry?.maxRetries || 2,
+      retryDelay: options.retry?.baseDelay || 500,
+      backoffFactor: 2,
+      // Mark as optional unless explicitly required
+      optional: !options.requireSuccessful
+    }
   );
 }
