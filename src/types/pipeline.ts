@@ -4,6 +4,8 @@
 
 import { z } from 'zod';
 import { LanguageModel } from 'ai';
+import { LogLevel } from '../utils/logging';
+import { BaseResearchError } from './errors';
 
 /**
  * Base interface for research data objects
@@ -164,7 +166,7 @@ export interface ResearchState {
   outputSchema: z.ZodType<ResearchResult>;
   data: ResearchData;
   results: ResearchResult[];
-  errors: (Error | ResearchError)[];
+  errors: (Error | BaseResearchError)[];
   /** Default language model to use if not specified in a step */
   defaultLLM?: LanguageModel;
   metadata: {
@@ -192,6 +194,8 @@ export interface ResearchState {
     clusterCount?: number;
     /** Relationship counts from classification */
     relationshipCount?: number;
+    /** Pipeline configuration used */
+    pipelineConfig?: PipelineConfig;
     /** Additional metadata properties */
     [key: string]: any;
   };
@@ -203,10 +207,19 @@ export interface ResearchState {
 export interface StepExecutionRecord {
   stepName: string;
   startTime: Date;
-  endTime?: Date;
+  endTime: Date;
   success: boolean;
-  error?: Error;
-  metadata?: Record<string, any>;
+  error?: Error | BaseResearchError;
+  metadata?: {
+    /** Duration of step execution in milliseconds */
+    duration?: number;
+    /** Number of retry attempts made */
+    retryAttempts?: number;
+    /** Whether the step was skipped */
+    skipped?: boolean;
+    /** Additional metadata */
+    [key: string]: any;
+  };
 }
 
 /**
@@ -224,6 +237,10 @@ export interface ResearchStep {
   execute: (state: ResearchState) => Promise<ResearchState>;
   rollback?: (state: ResearchState) => Promise<ResearchState>;
   options?: StepOptions;
+  /** Whether this step can be retried on failure */
+  retryable?: boolean;
+  /** Whether this step can be skipped without breaking the pipeline */
+  optional?: boolean;
 }
 
 /**
@@ -231,9 +248,20 @@ export interface ResearchStep {
  */
 export interface PipelineConfig {
   steps: ResearchStep[];
+  /** How to handle errors in the pipeline */
   errorHandling?: 'stop' | 'continue' | 'rollback';
+  /** Maximum number of retry attempts for retryable steps */
   maxRetries?: number;
+  /** Initial delay between retries in milliseconds */
+  retryDelay?: number;
+  /** Factor by which to increase the delay on each subsequent retry */
+  backoffFactor?: number;
+  /** Whether to continue with the next step even if the current step fails */
+  continueOnError?: boolean;
+  /** Maximum execution time in milliseconds before timeout */
   timeout?: number;
+  /** Minimum log level to display */
+  logLevel?: LogLevel;
 }
 
 /**

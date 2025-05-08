@@ -10,6 +10,14 @@ import {
   ResearchResult
 } from '../types/pipeline';
 import { z } from 'zod';
+import { logger, createStepLogger } from '../utils/logging';
+import { executeWithRetry } from '../utils/retry';
+import { 
+  BaseResearchError, 
+  PipelineError, 
+  ConfigurationError,
+  isResearchError
+} from '../types/errors';
 
 /**
  * Default pipeline configuration
@@ -18,7 +26,11 @@ const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   steps: [],
   errorHandling: 'stop',
   maxRetries: 3,
+  retryDelay: 1000,
+  backoffFactor: 2,
+  continueOnError: false,
   timeout: 300000, // 5 minutes
+  logLevel: 'info',
 };
 
 /**
@@ -46,16 +58,23 @@ function recordStepExecution(
   state: ResearchState,
   step: ResearchStep,
   success: boolean,
-  error?: Error,
+  error?: Error | BaseResearchError,
+  duration?: number,
   metadata?: Record<string, any>
 ): ResearchState {
+  const startTime = new Date(Date.now() - (duration || 0));
+  const endTime = new Date();
+  
   const record: StepExecutionRecord = {
     stepName: step.name,
-    startTime: new Date(),
-    endTime: new Date(),
+    startTime,
+    endTime,
     success,
     error,
-    metadata,
+    metadata: {
+      ...metadata,
+      duration: duration || endTime.getTime() - startTime.getTime(),
+    },
   };
 
   return {
@@ -69,37 +88,91 @@ function recordStepExecution(
 }
 
 /**
- * Executes a single step with retry logic
+ * Executes a single step with enhanced error handling and retry logic
  */
-async function executeStepWithRetry(
+async function executeStepWithErrorHandling(
   step: ResearchStep,
   state: ResearchState,
-  maxRetries: number
+  config: PipelineConfig
 ): Promise<ResearchState> {
-  let retries = 0;
-  let currentState = state;
-  let error: Error | undefined;
-
-  while (retries <= maxRetries) {
+  const stepLogger = createStepLogger(step.name);
+  let startTime: number;
+  
+  // Define the execution function
+  const executeStep = async (): Promise<ResearchState> => {
+    startTime = Date.now();
+    stepLogger.info(`Starting execution`);
+    
     try {
-      console.log(`Executing step: ${step.name}`);
-      const updatedState = await step.execute(currentState);
-      return recordStepExecution(updatedState, step, true);
-    } catch (err) {
-      error = err instanceof Error ? err : new Error(String(err));
-      console.error(`Error in step ${step.name}, attempt ${retries + 1}/${maxRetries + 1}:`, error);
-      retries++;
+      // Execute the step
+      const updatedState = await step.execute(state);
       
-      if (retries <= maxRetries) {
-        // Wait before retrying (exponential backoff)
-        const backoffTime = Math.min(1000 * Math.pow(2, retries - 1), 30000);
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
+      // Record success
+      const duration = Date.now() - startTime;
+      stepLogger.info(`Execution completed successfully in ${duration}ms`);
+      
+      return recordStepExecution(updatedState, step, true, undefined, duration);
+    } catch (error: unknown) {
+      const duration = Date.now() - startTime;
+      
+      // Transform errors into ResearchError if needed
+      let researchError: BaseResearchError;
+      
+      if (isResearchError(error)) {
+        researchError = error as BaseResearchError;
+      } else if (error instanceof Error) {
+        researchError = new BaseResearchError({
+          message: error.message,
+          code: 'step_execution_error',
+          step: step.name,
+          details: { originalError: error, stack: error.stack }
+        });
+      } else {
+        researchError = new BaseResearchError({
+          message: `Unknown error in step ${step.name}`,
+          code: 'unknown_error',
+          step: step.name,
+          details: { originalError: error }
+        });
       }
+      
+      // Log the error
+      stepLogger.error(`Execution failed in ${duration}ms: ${researchError.getFormattedMessage()}`);
+      
+      // Add error to state and mark as failed
+      return recordStepExecution(state, step, false, researchError, duration);
     }
+  };
+  
+  // Execute with retry if step is marked as retryable
+  if (step.retryable && config.maxRetries && config.maxRetries > 0) {
+    stepLogger.debug(`Step is retryable, will retry up to ${config.maxRetries} times if needed`);
+    
+    try {
+      return await executeWithRetry(executeStep, {
+        maxRetries: config.maxRetries,
+        retryDelay: config.retryDelay || 1000,
+        backoffFactor: config.backoffFactor || 2,
+        onRetry: (attempt, error, delay) => {
+          stepLogger.warn(
+            `Retry attempt ${attempt}/${config.maxRetries} after error: ` +
+            `${error instanceof Error ? error.message : 'Unknown error'}. ` +
+            `Retrying in ${delay}ms...`
+          );
+        }
+      });
+    } catch (error) {
+      // If all retries failed, we'll get here
+      stepLogger.error(`All ${config.maxRetries} retry attempts failed`);
+      
+      // The error has already been transformed by executeStep
+      // Just return the state from the last attempt
+      return state;
+    }
+  } else {
+    // No retry, just execute once
+    return executeStep();
   }
-
-  // All retries failed
-  return recordStepExecution(currentState, step, false, error);
 }
 
 /**
@@ -111,65 +184,116 @@ export async function executePipeline(
   config: Partial<PipelineConfig> = {}
 ): Promise<ResearchState> {
   const fullConfig: PipelineConfig = { ...DEFAULT_PIPELINE_CONFIG, ...config, steps };
-  let state = initialState;
-
+  
+  // Configure logger based on pipeline config
+  logger.setLogLevel(fullConfig.logLevel || 'info');
+  
+  // Initialize state and add start time
+  let state: ResearchState = {
+    ...initialState,
+    metadata: {
+      ...initialState.metadata,
+      startTime: new Date(),
+      pipelineConfig: fullConfig,
+    }
+  };
+  
+  logger.info(`Starting pipeline execution with ${steps.length} steps`);
+  
   // Create a timeout promise
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error(`Pipeline execution timed out after ${fullConfig.timeout}ms`)), 
-      fullConfig.timeout);
+    setTimeout(() => {
+      const error = new PipelineError({
+        message: `Pipeline execution timed out after ${fullConfig.timeout}ms`,
+        step: 'pipeline',
+      });
+      reject(error);
+    }, fullConfig.timeout || DEFAULT_PIPELINE_CONFIG.timeout);
   });
 
   // Execute the pipeline with timeout
   try {
     const executionPromise = executeSteps(state, fullConfig);
     state = await Promise.race([executionPromise, timeoutPromise]);
+    
+    logger.info(`Pipeline execution completed successfully`);
   } catch (error) {
-    if (error instanceof Error) {
-      state.errors.push(error);
-    } else {
-      state.errors.push(new Error(String(error)));
-    }
+    logger.error(`Pipeline execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    // Transform error to ResearchError if needed
+    const researchError = isResearchError(error) 
+      ? error as BaseResearchError
+      : new PipelineError({
+          message: error instanceof Error ? error.message : String(error),
+          step: 'pipeline',
+        });
+    
+    state.errors.push(researchError);
   } finally {
+    // Always update end time
     state.metadata.endTime = new Date();
+    
+    // Calculate total duration
+    const duration = state.metadata.endTime.getTime() - state.metadata.startTime.getTime();
+    logger.info(`Pipeline execution finished in ${duration}ms`);
   }
 
   return state;
 }
 
 /**
- * Execute pipeline steps sequentially
+ * Execute pipeline steps sequentially with enhanced error handling
  */
 async function executeSteps(
   initialState: ResearchState,
   config: PipelineConfig
 ): Promise<ResearchState> {
   let state = initialState;
-  const { steps, errorHandling, maxRetries } = config;
+  const { steps, errorHandling, continueOnError } = config;
 
   for (const step of steps) {
-    const updatedState = await executeStepWithRetry(step, state, maxRetries!);
+    // Execute the step with error handling
+    const updatedState = await executeStepWithErrorHandling(step, state, config);
     state = updatedState;
 
     // Check for errors and handle according to strategy
     const latestExecution = state.metadata.stepHistory[state.metadata.stepHistory.length - 1];
     
     if (!latestExecution.success) {
-      if (errorHandling === 'stop') {
+      logger.warn(`Step "${step.name}" failed`);
+      
+      if (errorHandling === 'stop' && !continueOnError) {
+        logger.info(`Stopping pipeline execution due to error in step "${step.name}" (errorHandling: 'stop')`);
         break;
       } else if (errorHandling === 'rollback' && step.rollback) {
+        logger.info(`Rolling back step "${step.name}"`);
         try {
           state = await step.rollback(state);
+          logger.info(`Rollback for step "${step.name}" successful`);
         } catch (rollbackError) {
-          console.error(`Rollback for step ${step.name} failed:`, rollbackError);
-          state.errors.push(
-            rollbackError instanceof Error 
-              ? rollbackError 
-              : new Error(`Rollback for step ${step.name} failed: ${String(rollbackError)}`)
-          );
+          logger.error(`Rollback for step "${step.name}" failed: ${
+            rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+          }`);
+          
+          // Transform error to ResearchError if needed
+          const researchError = isResearchError(rollbackError) 
+            ? rollbackError
+            : new PipelineError({
+                message: `Rollback for step "${step.name}" failed: ${
+                  rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+                }`,
+                step: step.name,
+              });
+          
+          state.errors.push(researchError);
         }
-        break;
+        
+        if (!continueOnError) {
+          logger.info(`Stopping pipeline execution after rollback (errorHandling: 'rollback')`);
+          break;
+        }
       }
-      // 'continue' strategy just moves to the next step
+      // For 'continue' strategy or if continueOnError is true, move to the next step
     }
   }
 

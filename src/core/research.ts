@@ -12,6 +12,13 @@ import { searchWeb } from '../steps/searchWeb';
 import { extractContent } from '../steps/extractContent';
 import { factCheck } from '../steps/factCheck';
 import { summarize } from '../steps/summarize';
+import { 
+  BaseResearchError, 
+  ConfigurationError, 
+  ValidationError,
+  isResearchError 
+} from '../types/errors';
+import { logger } from '../utils/logging';
 
 // Define a more specific type for the steps schema using our defined types
 const researchStepSchema = z.object({
@@ -23,7 +30,8 @@ const researchStepSchema = z.object({
     .args(z.custom<ResearchState>())
     .returns(z.promise(z.custom<ResearchState>()))
     .optional(),
-  options: z.record(z.string(), z.any()).optional()
+  options: z.record(z.string(), z.any()).optional(),
+  retryable: z.boolean().optional()
 });
 
 /**
@@ -31,49 +39,128 @@ const researchStepSchema = z.object({
  * 
  * @param input The research input with query, output schema, optional steps, and default LLM
  * @returns The research results in the structure defined by outputSchema
+ * @throws {ConfigurationError} When configuration is invalid
+ * @throws {ValidationError} When output doesn't match schema
+ * @throws {BaseResearchError} For other research-related errors
  */
 export async function research(input: ResearchInput): Promise<ResearchResult> {
-  // Validate the input against the schema
-  const { query, outputSchema, steps = [], config = {}, defaultLLM } = input;
+  try {
+    logger.debug('Starting research', { query: input.query });
+    
+    // Validate the input against the schema
+    const { query, outputSchema, steps = [], config = {}, defaultLLM } = input;
 
-  // Create the initial pipeline state
-  const initialState = createInitialState(query, outputSchema);
-  
-  // Add the default LLM to the state if provided
-  if (defaultLLM) {
-    initialState.defaultLLM = defaultLLM;
+    // Create the initial pipeline state
+    const initialState = createInitialState(query, outputSchema);
+    
+    // Add the default LLM to the state if provided
+    if (defaultLLM) {
+      initialState.defaultLLM = defaultLLM;
+    }
+
+    // If no steps provided, add default steps
+    const pipelineSteps = steps.length > 0 ? steps : getDefaultSteps(query);
+    
+    // If we're using default steps and no defaultLLM is provided, throw an error
+    if (steps.length === 0 && !defaultLLM) {
+      throw new ConfigurationError({
+        message: "No language model provided for research. When using default steps, you must provide a defaultLLM parameter.",
+        suggestions: [
+          "Add defaultLLM parameter: research({ query, outputSchema, defaultLLM: openai('gpt-4o') })",
+          "Provide custom steps that don't require an LLM"
+        ]
+      });
+    }
+
+    // Execute the pipeline with the provided steps and configuration
+    const finalState = await executePipeline(initialState, pipelineSteps, config);
+
+    // Check for errors
+    if (finalState.errors.length > 0) {
+      // Get the first error that stopped the pipeline
+      const criticalError = finalState.errors.find(e => 
+        isResearchError(e) && !config.continueOnError
+      ) || finalState.errors[0];
+      
+      logger.error(
+        `Research pipeline failed with ${finalState.errors.length} error(s)`,
+        { firstError: criticalError }
+      );
+      
+      // If it's already a research error, throw it directly
+      if (isResearchError(criticalError)) {
+        throw criticalError;
+      } else {
+        // Convert to BaseResearchError if it's a generic error
+        throw new BaseResearchError({
+          message: criticalError.message || String(criticalError),
+          code: 'pipeline_error',
+          details: { originalError: criticalError }
+        });
+      }
+    }
+
+    // If no results were produced, return a helpful error
+    if (finalState.results.length === 0) {
+      throw new ValidationError({
+        message: 'Research completed but produced no results',
+        suggestions: [
+          "Check that at least one step adds to the 'results' array",
+          "Set includeInResults: true for the final step",
+          "Verify that steps are executing successfully"
+        ]
+      });
+    }
+
+    // Get the final result (usually the last one or a combined result)
+    const result = finalState.results[finalState.results.length - 1];
+
+    // Validate the result against the output schema
+    try {
+      const validatedResult = outputSchema.parse(result);
+      logger.info('Research completed successfully');
+      return validatedResult;
+    } catch (error) {
+      logger.error('Output validation failed', { error });
+      
+      // Transform Zod errors into our ValidationError
+      if (error instanceof z.ZodError) {
+        throw new ValidationError({
+          message: 'Research results do not match the expected schema',
+          details: { 
+            zodErrors: error.errors,
+            result
+          },
+          suggestions: [
+            "Check that your outputSchema matches the actual structure of your results",
+            "Verify that all steps are producing the expected data format",
+            "Add appropriate transformations to ensure output matches the schema"
+          ]
+        });
+      }
+      throw error;
+    }
+  } catch (error) {
+    // Make sure we always return a consistent error type
+    if (isResearchError(error)) {
+      // Already a ResearchError, just throw it
+      throw error;
+    } else if (error instanceof Error) {
+      // Convert generic Error to BaseResearchError
+      throw new BaseResearchError({
+        message: error.message,
+        code: 'unknown_error',
+        details: { originalError: error }
+      });
+    } else {
+      // Handle non-Error objects
+      throw new BaseResearchError({
+        message: 'An unknown error occurred during research',
+        code: 'unknown_error',
+        details: { originalError: error }
+      });
+    }
   }
-
-  // If no steps provided, add default steps
-  const pipelineSteps = steps.length > 0 ? steps : getDefaultSteps(query);
-  
-  // If we're using default steps and no defaultLLM is provided, throw an error
-  if (steps.length === 0 && !defaultLLM) {
-    throw new Error(
-      "No language model provided for research. When using default steps, you must provide a defaultLLM parameter. " +
-      "For example: research({ query, outputSchema, defaultLLM: openai('gpt-4o') })"
-    );
-  }
-
-  // Execute the pipeline with the provided steps and configuration
-  const finalState = await executePipeline(initialState, pipelineSteps, config);
-
-  // Check for errors
-  if (finalState.errors.length > 0) {
-    const errorMessage = finalState.errors.map(err => err.message).join('; ');
-    throw new Error(`Research pipeline failed: ${errorMessage}`);
-  }
-
-  // If no results were produced, return a helpful error
-  if (finalState.results.length === 0) {
-    throw new Error('Research completed but produced no results');
-  }
-
-  // Get the final result (usually the last one or a combined result)
-  const result = finalState.results[finalState.results.length - 1];
-
-  // Validate the result against the output schema
-  return outputSchema.parse(result);
 }
 
 /**

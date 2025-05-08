@@ -24,14 +24,13 @@ Build a deep research tool as an npm package. Users provide a search query and o
 - Examples (basic to comprehensive implementations)
 - Advanced features (multi-track research, parallel execution, result merging)
 - Type system improvements (proper interfaces, reduced any/unknown usage)
+- Integration with real LLM services through Vercel AI SDK
 
 ### 🔄 In Progress
-- Integration with real LLM services through Vercel AI SDK
 - Error handling improvements
+- Enhanced error handling and logging
 
 ### ⏭️ Next Steps
-- Complete LLM integration with `mastra`/`ai`
-- Enhanced error handling and logging
 - Documentation and testing
 
 ## How It Works
