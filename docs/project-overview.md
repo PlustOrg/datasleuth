@@ -235,7 +235,7 @@ const results = await research({
 - Examples demonstrate different usage patterns and scenarios
 - Type system has been improved with proper interfaces and minimal use of any/unknown types
 - Most implementations currently use simulations rather than real LLM calls
-- Ready for integration with actual LLM providers
+- Integrated with real LLM providers via Vercel AI SDK
 
 ## Dependencies
 
@@ -246,7 +246,6 @@ const results = await research({
 
 ## Next Development Areas
 
-- Integrating with real LLM providers via Vercel AI SDK
 - Enhancing error handling and resilience
 - Adding comprehensive unit and integration tests
 - Implementing specialized domain-specific analysis modules
