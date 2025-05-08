@@ -212,6 +212,7 @@ const parallelResearch = await research({
 10. Handle `ResearchState` metadata properly
 11. Check optional properties before access
 12. Use type guards for dynamic data
+13. Errors in `catch` blocks are auto-typed as `unknown`. Use type guards to get the actual type.
 
 ## Vercel AI SDK Docs
 

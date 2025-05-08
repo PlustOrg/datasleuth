@@ -7,7 +7,7 @@ import { createStep } from '../utils/steps';
 import { ResearchState, ExtractedContent, FactCheckResult } from '../types/pipeline';
 import { StepOptions } from '../types/pipeline';
 import { z } from 'zod';
-import { AIModel } from './plan';
+import { generateText, LanguageModel } from 'ai';
 
 /**
  * Format options for summary output
@@ -20,8 +20,8 @@ export type SummaryFormat = 'paragraph' | 'bullet' | 'structured';
 export interface SummarizeOptions extends StepOptions {
   /** Maximum length of the generated summary (characters) */
   maxLength?: number;
-  /** Model to use for summarization */
-  model?: AIModel;
+  /** Model to use for summarization (from the AI SDK) */
+  llm?: LanguageModel;
   /** Temperature for the LLM generation (0.0 to 1.0) */
   temperature?: number;
   /** Format for the summary (paragraph, bullet, structured) */
@@ -64,6 +64,7 @@ async function executeSummarizeStep(
 ): Promise<ResearchState> {
   const {
     maxLength = 2000,
+    llm,
     temperature = 0.3,
     format = 'paragraph',
     focus = [],
@@ -102,17 +103,36 @@ async function executeSummarizeStep(
   // Normalize focus to array if it's a string
   const focusArray = typeof focus === 'string' ? [focus] : focus;
   
-  // For now, simulate summary generation
-  // In a real implementation, this would use an LLM to generate a summary
-  const summary = await simulateSummaryGeneration(
-    contentToSummarize,
-    state.query,
-    maxLength,
-    format,
-    focusArray,
-    includeCitations,
-    additionalInstructions
-  );
+  let summary: string;
+  
+  // Check if an LLM model was provided
+  if (llm) {
+    // Use the provided LLM model to generate a summary
+    summary = await generateSummaryWithLLM(
+      contentToSummarize,
+      state.query,
+      maxLength,
+      format,
+      focusArray,
+      includeCitations,
+      additionalInstructions,
+      llm,
+      temperature,
+      customPrompt
+    );
+  } else {
+    // Fall back to simulated summary if no LLM is provided
+    console.warn('No LLM model provided for summarization step. Using simulated summary.');
+    summary = await simulateSummaryGeneration(
+      contentToSummarize,
+      state.query,
+      maxLength,
+      format,
+      focusArray,
+      includeCitations,
+      additionalInstructions
+    );
+  }
   
   // Update state with summary
   const newState = {
@@ -240,6 +260,95 @@ async function simulateSummaryGeneration(
   }
   
   return summary;
+}
+
+/**
+ * Generate summary using the provided LLM from the AI SDK
+ */
+async function generateSummaryWithLLM(
+  contentItems: string[],
+  query: string,
+  maxLength: number,
+  format: SummaryFormat,
+  focus: string[],
+  includeCitations: boolean,
+  additionalInstructions: string | undefined,
+  llm: LanguageModel,
+  temperature: number,
+  customPrompt?: string
+): Promise<string> {
+  try {
+    // Prepare the content to summarize (limit to avoid token limits)
+    const contentText = contentItems.join('\n\n').slice(0, 15000);
+    
+    // Build formatting instructions based on the requested format
+    let formatInstructions = '';
+    switch (format) {
+      case 'paragraph':
+        formatInstructions = 'structure the summary as coherent paragraphs with a logical flow';
+        break;
+      case 'bullet':
+        formatInstructions = 'structure the summary as bullet points highlighting key insights';
+        break;
+      case 'structured':
+        formatInstructions = 'structure the summary with clear sections using markdown headings (## for main sections, ### for subsections)';
+        break;
+    }
+    
+    // Build focus instructions if any focus areas are specified
+    const focusInstructions = focus.length > 0
+      ? `Pay particular attention to these aspects: ${focus.join(', ')}.`
+      : '';
+    
+    // Build citation instructions
+    const citationInstructions = includeCitations
+      ? 'Include citations to relevant sources, formatted as a numbered list at the end of the summary.'
+      : 'Do not include citations.';
+    
+    // Add the additional instructions if provided
+    const extraInstructions = additionalInstructions
+      ? `Additional requirements: ${additionalInstructions}`
+      : '';
+    
+    // Use custom prompt or default
+    const systemPrompt = customPrompt || DEFAULT_SUMMARIZE_PROMPT;
+    
+    // Construct the prompt for summary generation
+    const summaryPrompt = `
+Query: "${query}"
+
+CONTENT TO SUMMARIZE:
+${contentText}
+
+Create a ${format} summary of the above content related to the query "${query}".
+${focusInstructions}
+${formatInstructions}
+${citationInstructions}
+${extraInstructions}
+
+Keep your summary under ${maxLength} characters.
+`;
+
+    // Generate the summary using the AI SDK
+    const { text } = await generateText({
+      model: llm,
+      system: systemPrompt,
+      prompt: summaryPrompt,
+      temperature,
+      maxTokens: Math.floor(maxLength / 4), // rough character to token conversion
+    });
+
+    // Ensure we don't exceed the max length
+    return text.length > maxLength 
+      ? text.substring(0, maxLength - 3) + '...' 
+      : text;
+  } catch (error: unknown) {
+    console.error('Error generating summary with LLM:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Return a basic error summary
+    return `Error generating summary: ${errorMessage}. Please try again with a different model or configuration.`;
+  }
 }
 
 /**

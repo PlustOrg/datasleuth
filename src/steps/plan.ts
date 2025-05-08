@@ -2,10 +2,10 @@
  * Research planning step for the research pipeline
  * Creates structured research plan with objectives and search queries
  */
-import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
+import { generateText, LanguageModel } from 'ai';
 
 // Schema for research plan output
 const researchPlanSchema = z.object({
@@ -37,24 +37,13 @@ Be specific, practical, and thorough. Consider what types of information would b
 `;
 
 /**
- * Interface for AI model configuration
- */
-export interface AIModel {
-  name: string;
-  provider: string;
-  apiKey?: string;
-  version?: string;
-  parameters?: Record<string, number | string | boolean>;
-}
-
-/**
  * Options for the planning step
  */
 export interface PlanOptions {
   /** Custom system prompt to override the default */
   customPrompt?: string;
-  /** Model to use for planning (from the AI library) */
-  model?: AIModel;
+  /** Model to use for planning (from the AI SDK) */
+  llm?: LanguageModel;
   /** Temperature for the LLM (0.0 to 1.0) */
   temperature?: number;
   /** Whether to include the research plan in the final results */
@@ -72,18 +61,27 @@ async function executePlanStep(
     customPrompt = DEFAULT_PLANNING_PROMPT,
     temperature = 0.4,
     includeInResults = true,
+    llm,
   } = options;
 
-  // For now, use a simulated research plan since we don't have a real LLM connection yet
-  // This will be replaced with actual LLM calls in the next iteration
-  const simulatedPlan: ResearchPlan = await simulateResearchPlan(state.query);
+  let researchPlan: ResearchPlan;
+
+  // Check if an LLM model was provided
+  if (llm) {
+    // Use the provided LLM model to generate a research plan
+    researchPlan = await generateResearchPlanWithLLM(state.query, customPrompt, llm, temperature);
+  } else {
+    // Fall back to simulated plan if no LLM is provided
+    console.warn('No LLM model provided for planning step. Using simulated research plan.');
+    researchPlan = await simulateResearchPlan(state.query);
+  }
 
   // Store the plan in state for later steps to use
   const newState = {
     ...state,
     data: {
       ...state.data,
-      researchPlan: simulatedPlan,
+      researchPlan,
     },
   };
 
@@ -91,11 +89,56 @@ async function executePlanStep(
   if (includeInResults) {
     return {
       ...newState,
-      results: [...newState.results, simulatedPlan],
+      results: [...newState.results, researchPlan],
     };
   }
 
   return newState;
+}
+
+/**
+ * Generate a research plan using the provided LLM from the AI SDK
+ */
+async function generateResearchPlanWithLLM(
+  query: string, 
+  systemPrompt: string, 
+  llm: LanguageModel,
+  temperature: number
+): Promise<ResearchPlan> {
+  try {
+    // Generate the research plan using the AI SDK
+    const { text } = await generateText({
+      model: llm,
+      system: systemPrompt,
+      prompt: `Create a detailed research plan for the query: "${query}"
+      
+      Output the research plan in JSON format matching this structure:
+      {
+        "objectives": ["objective 1", "objective 2", ...],
+        "searchQueries": ["query 1", "query 2", ...],
+        "relevantFactors": ["factor 1", "factor 2", ...],
+        "dataGatheringStrategy": "Detailed strategy description",
+        "expectedOutcomes": ["outcome 1", "outcome 2", ...]
+      }
+      
+      Make sure to format the output as valid JSON.`,
+      temperature,
+    });
+
+    // Parse the JSON response
+    try {
+      const parsedPlan = JSON.parse(text);
+      return researchPlanSchema.parse(parsedPlan);
+    } catch (parseError) {
+      console.error('Failed to parse LLM response as valid JSON:', parseError);
+      console.debug('Raw LLM response:', text);
+      throw new Error('LLM response was not valid JSON for research plan');
+    }
+  } catch (error: unknown) {
+    console.error('Error generating research plan with LLM:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to generate research plan: ${errorMessage}`);
+  }
 }
 
 /**

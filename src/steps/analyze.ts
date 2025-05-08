@@ -6,6 +6,7 @@ import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
+import { generateText, LanguageModel } from 'ai';
 
 /**
  * Schema for analysis results
@@ -27,8 +28,8 @@ export type AnalysisResult = z.infer<typeof analysisResultSchema>;
 export interface AnalyzeOptions {
   /** Focus area for analysis (e.g., 'market-trends', 'technical-details') */
   focus: string;
-  /** Model to use for analysis */
-  model?: any;
+  /** Model to use for analysis (from the AI SDK) */
+  llm?: LanguageModel;
   /** Temperature for the LLM (0.0 to 1.0) */
   temperature?: number;
   /** Depth of analysis ('basic', 'detailed', 'comprehensive') */
@@ -68,6 +69,7 @@ async function executeAnalyzeStep(
 ): Promise<ResearchState> {
   const {
     focus,
+    llm,
     temperature = 0.3,
     depth = 'detailed',
     includeEvidence = true,
@@ -79,7 +81,7 @@ async function executeAnalyzeStep(
   console.log(`Analyzing with focus: ${focus}, depth: ${depth}`);
   
   // Get relevant content for analysis
-  const contentToAnalyze = [];
+  const contentToAnalyze: string[] = [];
   
   // Add extracted content if available
   if (state.data.extractedContent) {
@@ -97,16 +99,34 @@ async function executeAnalyzeStep(
     return state;
   }
 
-  // For now, simulate analysis generation
-  // In a real implementation, this would use an LLM for analysis
-  const analysisResult = await simulateAnalysis(
-    contentToAnalyze,
-    state.query,
-    focus,
-    depth,
-    includeEvidence,
-    includeRecommendations
-  );
+  let analysisResult: AnalysisResult;
+
+  // Check if an LLM model was provided
+  if (llm) {
+    // Use the provided LLM model to generate the analysis
+    analysisResult = await generateAnalysisWithLLM(
+      contentToAnalyze,
+      state.query,
+      focus,
+      depth,
+      includeEvidence,
+      includeRecommendations,
+      llm,
+      temperature,
+      customPrompt
+    );
+  } else {
+    // Fall back to simulated analysis if no LLM is provided
+    console.warn('No LLM model provided for analysis step. Using simulated analysis.');
+    analysisResult = await simulateAnalysis(
+      contentToAnalyze,
+      state.query,
+      focus,
+      depth,
+      includeEvidence,
+      includeRecommendations
+    );
+  }
   
   // Store the analysis in the appropriate format
   const focusKey = focus.replace(/\s+/g, '-').toLowerCase();
@@ -260,6 +280,77 @@ async function simulateAnalysis(
     limitations,
     recommendations: includeRecommendations ? recommendations : undefined,
   };
+}
+
+/**
+ * Generate analysis using the provided LLM from the AI SDK
+ */
+async function generateAnalysisWithLLM(
+  contentItems: string[],
+  query: string,
+  focus: string,
+  depth: string,
+  includeEvidence: boolean,
+  includeRecommendations: boolean,
+  llm: LanguageModel,
+  temperature: number,
+  customPrompt?: string
+): Promise<AnalysisResult> {
+  try {
+    // Prepare the content to analyze
+    const contentText = contentItems.join('\n\n');
+    
+    // Create a system prompt by replacing placeholders in the template
+    const systemPrompt = (customPrompt || DEFAULT_ANALYSIS_PROMPT)
+      .replace('{focus}', focus)
+      .replace('{depth}', depth);
+    
+    // Construct the prompt for analysis
+    const analysisPrompt = `
+Query: "${query}"
+
+CONTENT TO ANALYZE:
+${contentText}
+
+Focus specifically on aspects related to "${focus}" and provide a ${depth} analysis.
+${includeEvidence ? 'Include supporting evidence from the provided content.' : ''}
+${includeRecommendations ? 'Provide actionable recommendations based on your analysis.' : ''}
+
+Format your response as valid JSON with the following structure:
+{
+  "focus": "${focus}",
+  "insights": ["insight 1", "insight 2", ...],
+  "confidence": 0.85, // a number between 0 and 1 representing your confidence in this analysis
+  ${includeEvidence ? '"supportingEvidence": ["evidence 1", "evidence 2", ...],' : ''}
+  "limitations": ["limitation 1", "limitation 2", ...],
+  ${includeRecommendations ? '"recommendations": ["recommendation 1", "recommendation 2", ...]' : ''}
+}
+
+Ensure the JSON is properly formatted with no trailing commas.
+`;
+
+    // Generate the analysis using the AI SDK
+    const { text } = await generateText({
+      model: llm,
+      system: systemPrompt,
+      prompt: analysisPrompt,
+      temperature,
+    });
+
+    // Parse the JSON response
+    try {
+      const parsedAnalysis = JSON.parse(text);
+      return analysisResultSchema.parse(parsedAnalysis);
+    } catch (parseError) {
+      console.error('Failed to parse LLM response as valid JSON:', parseError);
+      console.debug('Raw LLM response:', text);
+      throw new Error('LLM response was not valid JSON for analysis result');
+    }
+  } catch (error: unknown) {
+    console.error('Error generating analysis with LLM:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to generate analysis: ${errorMessage}`);
+  }
 }
 
 /**

@@ -7,7 +7,7 @@ import { createStep } from '../utils/steps';
 import { ResearchState, FactCheckResult as StateFactCheckResult, ExtractedContent as StateExtractedContent } from '../types/pipeline';
 import { StepOptions } from '../types/pipeline';
 import { z } from 'zod';
-import { AIModel } from './plan';
+import { generateText, LanguageModel } from 'ai';
 
 /**
  * Schema for fact check results
@@ -29,8 +29,8 @@ export type FactCheckResult = z.infer<typeof factCheckResultSchema>;
 export interface FactCheckOptions extends StepOptions {
   /** Minimum confidence threshold for validation (0.0 to 1.0) */
   threshold?: number;
-  /** Model to use for fact checking */
-  model?: AIModel;
+  /** Model to use for fact checking (from the AI SDK) */
+  llm?: LanguageModel;
   /** Whether to include evidence in the output */
   includeEvidence?: boolean;
   /** Whether to include fact check results in the final results */
@@ -41,6 +41,8 @@ export interface FactCheckOptions extends StepOptions {
   maxStatements?: number;
   /** Custom prompt for the fact-checking LLM */
   customPrompt?: string;
+  /** Temperature for the LLM (0.0 to 1.0) */
+  temperature?: number;
 }
 
 /**
@@ -68,6 +70,8 @@ async function executeFactCheckStep(
 ): Promise<ResearchState> {
   const {
     threshold = 0.7,
+    llm,
+    temperature = 0.3,
     includeEvidence = true,
     includeInResults = true,
     statements = [],
@@ -93,13 +97,29 @@ async function executeFactCheckStep(
 
   console.log(`Fact checking ${statementsToCheck.length} statements...`);
   
-  // For now, simulate fact checking results
-  // In a real implementation, this would use an LLM to validate statements
-  const factCheckResults: StateFactCheckResult[] = await simulateFactChecking(
-    statementsToCheck,
-    threshold,
-    includeEvidence
-  );
+  // Perform fact checking
+  let factCheckResults: StateFactCheckResult[];
+  
+  // Check if an LLM model was provided
+  if (llm) {
+    // Use the provided LLM model for fact checking
+    factCheckResults = await performFactCheckingWithLLM(
+      statementsToCheck,
+      threshold,
+      includeEvidence,
+      llm,
+      temperature,
+      customPrompt
+    );
+  } else {
+    // Fall back to simulated fact checking if no LLM is provided
+    console.warn('No LLM model provided for fact checking step. Using simulated fact checking.');
+    factCheckResults = await simulateFactChecking(
+      statementsToCheck,
+      threshold,
+      includeEvidence
+    );
+  }
   
   // Calculate overall factual accuracy score
   const validStatements = factCheckResults.filter(result => result.isValid);
@@ -233,6 +253,91 @@ async function simulateFactChecking(
     
     return result;
   });
+}
+
+/**
+ * Performs fact checking using an LLM from the AI SDK
+ */
+async function performFactCheckingWithLLM(
+  statements: string[],
+  threshold: number,
+  includeEvidence: boolean,
+  llm: LanguageModel,
+  temperature: number,
+  customPrompt?: string
+): Promise<StateFactCheckResult[]> {
+  const results: StateFactCheckResult[] = [];
+  const systemPrompt = customPrompt || DEFAULT_FACT_CHECK_PROMPT;
+  
+  // Process each statement individually to maintain detailed control
+  for (const statement of statements) {
+    try {
+      const factCheckPrompt = `
+Statement to verify: "${statement}"
+
+Analyze this statement for factual accuracy, and provide your assessment in valid JSON format:
+{
+  "statement": "${statement}",
+  "isValid": true/false,
+  "confidence": 0.XX, // number between 0 and 1
+  ${includeEvidence ? `"evidence": ["reason 1", "reason 2", ...],
+  "sources": ["https://example.com/source1", "https://example.com/source2", ...],
+  "corrections": "If statement is not valid, provide a corrected version here"` : ''}
+}
+
+Ensure your response is valid JSON and properly formatted with no trailing commas.
+`;
+
+      // Generate the fact check using the AI SDK
+      const { text } = await generateText({
+        model: llm,
+        system: systemPrompt,
+        prompt: factCheckPrompt,
+        temperature,
+      });
+
+      // Parse the JSON response
+      try {
+        const parsedResult = JSON.parse(text);
+        
+        // Validate the result with our schema
+        const validatedResult = factCheckResultSchema.parse(parsedResult);
+        
+        // Only add results that meet our confidence threshold
+        if (validatedResult.confidence >= threshold) {
+          results.push(validatedResult);
+        } else {
+          console.log(`Statement skipped due to low confidence (${validatedResult.confidence}): ${statement}`);
+        }
+      } catch (parseError) {
+        console.error('Failed to parse LLM response as valid JSON for fact checking:', parseError);
+        console.debug('Raw LLM response:', text);
+        
+        // Add a fallback result for this statement
+        results.push({
+          statement,
+          isValid: false,
+          confidence: 0.5,
+          evidence: ['Failed to parse LLM response'],
+          corrections: 'Unable to verify this statement due to processing error'
+        });
+      }
+    } catch (error: unknown) {
+      console.error('Error performing fact check with LLM:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Add a fallback result
+      results.push({
+        statement,
+        isValid: false,
+        confidence: 0.5,
+        evidence: [`Error: ${errorMessage}`],
+        corrections: 'Unable to verify this statement due to an error'
+      });
+    }
+  }
+  
+  return results;
 }
 
 /**

@@ -17,6 +17,7 @@ npm install @plust/deep-restruct
 - 🔄 Adaptive research strategies with feedback loops
 - 📚 Structured output format with schema validation
 - 🔧 Flexible and extensible architecture
+- 🧠 Drop-in LLM integration with Vercel AI SDK
 
 ## Basic Usage
 
@@ -97,6 +98,71 @@ const results = await research({
   }
 });
 ```
+
+## LLM Integration with Vercel AI SDK
+
+@plust/deep-restruct seamlessly integrates with the Vercel AI SDK, allowing you to use any supported LLM as a drop-in component:
+
+```typescript
+import { research, plan, analyze, factCheck, summarize } from '@plust/deep-restruct';
+import { z } from 'zod';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+
+// Define your output schema
+const outputSchema = z.object({
+  summary: z.string(),
+  analysis: z.object({
+    insights: z.array(z.string())
+  }),
+  factChecks: z.array(z.object({
+    statement: z.string(),
+    isValid: z.boolean()
+  }))
+});
+
+// Use different LLM providers for different steps
+const results = await research({
+  query: "Advancements in gene editing technologies",
+  outputSchema,
+  steps: [
+    // Use OpenAI for research planning
+    plan({ 
+      llm: openai('gpt-4o'),
+      temperature: 0.4
+    }),
+    
+    // Use Anthropic for specialized analysis
+    analyze({
+      llm: anthropic('claude-3-opus-20240229'),
+      focus: 'ethical-considerations',
+      depth: 'comprehensive'
+    }),
+    
+    // Use OpenAI for fact checking
+    factCheck({
+      llm: openai('gpt-4o'),
+      threshold: 0.8,
+      includeEvidence: true
+    }),
+    
+    // Use Anthropic for final summarization
+    summarize({
+      llm: anthropic('claude-3-sonnet-20240229'),
+      format: 'structured',
+      maxLength: 2000
+    })
+  ]
+});
+```
+
+You can use any model provider supported by the Vercel AI SDK, including:
+- OpenAI (`openai`)
+- Anthropic (`anthropic`)
+- Google (`google`)
+- Mistral (`mistral`)
+- Cohere (`cohere`)
+- And more
 
 ## Orchestration
 
