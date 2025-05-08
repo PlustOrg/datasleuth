@@ -1,7 +1,7 @@
 /**
  * Utilities for creating and working with pipeline steps
  */
-import { ResearchStep, ResearchState } from '../types/pipeline';
+import { ResearchStep, ResearchState, StepOptions } from '../types/pipeline';
 
 /**
  * Creates a standardized pipeline step
@@ -14,8 +14,8 @@ import { ResearchStep, ResearchState } from '../types/pipeline';
  */
 export function createStep(
   name: string,
-  executeFn: (state: ResearchState, options?: Record<string, any>) => Promise<ResearchState>,
-  options: Record<string, any> = {},
+  executeFn: (state: ResearchState, options?: StepOptions) => Promise<ResearchState>,
+  options: StepOptions = {},
   rollbackFn?: (state: ResearchState) => Promise<ResearchState>
 ): ResearchStep {
   return {
@@ -37,7 +37,7 @@ export function createStep(
 export function createCompositeStep(
   name: string,
   steps: ResearchStep[],
-  options: Record<string, any> = {}
+  options: StepOptions = {}
 ): ResearchStep {
   return {
     name,

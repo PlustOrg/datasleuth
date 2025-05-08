@@ -6,8 +6,10 @@ import {
   ResearchState, 
   ResearchStep, 
   PipelineConfig, 
-  StepExecutionRecord 
+  StepExecutionRecord,
+  ResearchResult
 } from '../types/pipeline';
+import { z } from 'zod';
 
 /**
  * Default pipeline configuration
@@ -22,7 +24,7 @@ const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
 /**
  * Creates a new research state
  */
-export function createInitialState(query: string, outputSchema: any): ResearchState {
+export function createInitialState(query: string, outputSchema: z.ZodType<ResearchResult>): ResearchState {
   return {
     query,
     outputSchema,

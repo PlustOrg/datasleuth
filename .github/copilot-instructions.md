@@ -40,7 +40,7 @@ Uses modular pipeline with configurable steps to plan research, search web, extr
 Based on the current project status, here's the implementation plan:
 
 ### 1. Type System Improvements
-- Replace all `any` type usages with proper type definitions
+- Replace all `any`/`unknown` type usages with proper type definitions
 - Add stricter type checking for pipeline steps and their inputs/outputs
 - Create more specific interfaces for different research data structures
 - Add proper generics for schema validation in the research pipeline

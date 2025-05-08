@@ -3,12 +3,13 @@
  * Extracts content from URLs found in search results
  */
 import { createStep } from '../utils/steps';
-import { ResearchState } from '../types/pipeline';
+import { ResearchState, ExtractedContent as StateExtractedContent, SearchResult } from '../types/pipeline';
+import { StepOptions } from '../types/pipeline';
 
 /**
  * Options for the content extraction step
  */
-export interface ExtractContentOptions {
+export interface ExtractContentOptions extends StepOptions {
   /** CSS selectors to extract content from */
   selectors?: string;
   /** Alias for selectors (for backwards compatibility) */
@@ -21,21 +22,49 @@ export interface ExtractContentOptions {
   includeInResults?: boolean;
   /** Timeout for each URL fetch in milliseconds */
   timeout?: number;
+  /** Fetch retry configuration */
+  retry?: {
+    /** Maximum number of retries */
+    maxRetries?: number;
+    /** Base delay between retries in ms */
+    baseDelay?: number;
+  };
+}
+
+/**
+ * Interface for extracted content metadata
+ */
+export interface ExtractedContentMetadata {
+  /** Approximate word count in the content */
+  wordCount: number;
+  /** Domain of the source website */
+  domain: string;
+  /** HTTP status code of the response */
+  statusCode: number;
+  /** MIME type of the content */
+  contentType?: string;
+  /** Extraction timestamp */
+  extractedAt: string;
+  /** Which selectors matched and were used */
+  matchedSelectors?: string[];
+  /** Was this a complete extraction or partial */
+  isComplete?: boolean;
 }
 
 /**
  * Interface for extracted content
  */
 export interface ExtractedContent {
+  /** URL of the extracted content */
   url: string;
+  /** Title of the content */
   title: string;
+  /** The extracted text content */
   content: string;
+  /** ISO timestamp of when the content was extracted */
   extractedAt: string;
-  metadata?: {
-    wordCount?: number;
-    domain?: string;
-    statusCode?: number;
-  };
+  /** Additional metadata about the extraction */
+  metadata?: ExtractedContentMetadata;
 }
 
 /**
@@ -52,6 +81,7 @@ async function executeExtractContentStep(
     maxContentLength = 10000,
     includeInResults = false,
     timeout = 10000,
+    retry = { maxRetries: 2, baseDelay: 500 },
   } = options;
   
   // Use selectors if provided, otherwise use selector (alias), or fall back to default
@@ -67,7 +97,7 @@ async function executeExtractContentStep(
 
   // Extract content from each URL (up to maxUrls)
   const urlsToProcess = searchResults.slice(0, maxUrls);
-  const extractedContents: ExtractedContent[] = [];
+  const extractedContents: StateExtractedContent[] = [];
 
   // For now, simulate content extraction
   // In a real implementation, this would use fetch and a DOM parser
@@ -115,7 +145,7 @@ async function simulateContentExtraction(
   title: string,
   selectors: string,
   maxLength: number
-): Promise<ExtractedContent> {
+): Promise<StateExtractedContent> {
   // Simulate a delay as if we're fetching and parsing content
   await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 700));
   
@@ -138,16 +168,14 @@ async function simulateContentExtraction(
   // Trim to max length
   content = content.substring(0, maxLength);
 
+  const extractedAt = new Date().toISOString();
+
   return {
     url,
     title,
     content,
-    extractedAt: new Date().toISOString(),
-    metadata: {
-      wordCount: content.split(/\s+/).length,
-      domain,
-      statusCode: 200, // Simulated successful response
-    },
+    extractionDate: extractedAt,
+    selector: selectors
   };
 }
 
@@ -160,7 +188,7 @@ async function simulateContentExtraction(
 export function extractContent(options: ExtractContentOptions = {}): ReturnType<typeof createStep> {
   return createStep('ContentExtraction', 
     // Wrapper function that matches the expected signature
-    async (state: ResearchState, opts?: Record<string, any>) => {
+    async (state: ResearchState, opts?: StepOptions) => {
       return executeExtractContentStep(state, options);
     }, 
     options

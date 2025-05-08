@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { ResearchInput, ResearchStep } from '../types/pipeline';
+import { 
+  ResearchInput, 
+  ResearchStep, 
+  ResearchResult, 
+  ResearchState, 
+  StepOptions 
+} from '../types/pipeline';
 import { createInitialState, executePipeline } from './pipeline';
 import { plan } from '../steps/plan';
 import { searchWeb } from '../steps/searchWeb';
@@ -7,12 +13,25 @@ import { extractContent } from '../steps/extractContent';
 import { factCheck } from '../steps/factCheck';
 import { summarize } from '../steps/summarize';
 
+// Define a more specific type for the steps schema using our defined types
+const researchStepSchema = z.object({
+  name: z.string(),
+  execute: z.function()
+    .args(z.custom<ResearchState>())
+    .returns(z.promise(z.custom<ResearchState>())),
+  rollback: z.function()
+    .args(z.custom<ResearchState>())
+    .returns(z.promise(z.custom<ResearchState>()))
+    .optional(),
+  options: z.record(z.string(), z.any()).optional()
+});
+
 // Define the input schema for the research function
 const researchInputSchema = z.object({
   query: z.string(),
-  outputSchema: z.any(), // The output schema is dynamic and validated at runtime
-  steps: z.array(z.any()).optional(), // Steps will be validated during execution
-  config: z.record(z.any()).optional(), // Pipeline configuration
+  outputSchema: z.custom<z.ZodType<ResearchResult>>((val) => val instanceof z.ZodType), 
+  steps: z.array(researchStepSchema).optional(), 
+  config: z.record(z.string(), z.any()).optional(),
 });
 
 /**
@@ -21,7 +40,7 @@ const researchInputSchema = z.object({
  * @param input The research input with query, output schema, and optional steps
  * @returns The research results in the structure defined by outputSchema
  */
-export async function research(input: unknown): Promise<unknown> {
+export async function research(input: unknown): Promise<ResearchResult> {
   // Validate the input against the schema
   const validatedInput = researchInputSchema.parse(input) as ResearchInput;
   const { query, outputSchema, steps = [], config = {} } = validatedInput;
@@ -54,6 +73,15 @@ export async function research(input: unknown): Promise<unknown> {
 }
 
 /**
+ * Interface for a mock search provider
+ */
+export interface MockSearchProvider {
+  name: string;
+  apiKey: string;
+  [key: string]: string;
+}
+
+/**
  * Get default pipeline steps if none are provided
  * Creates a comprehensive research pipeline with planning, searching, 
  * content extraction, fact checking, and summarization
@@ -61,7 +89,7 @@ export async function research(input: unknown): Promise<unknown> {
 function getDefaultSteps(query: string): ResearchStep[] {
   // Mock search provider for demonstration
   // In a real implementation, users would need to configure this
-  const mockSearchProvider = {
+  const mockSearchProvider: MockSearchProvider = {
     name: 'google',
     apiKey: 'mock-api-key'
   };

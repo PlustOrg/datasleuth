@@ -37,13 +37,24 @@ Be specific, practical, and thorough. Consider what types of information would b
 `;
 
 /**
+ * Interface for AI model configuration
+ */
+export interface AIModel {
+  name: string;
+  provider: string;
+  apiKey?: string;
+  version?: string;
+  parameters?: Record<string, number | string | boolean>;
+}
+
+/**
  * Options for the planning step
  */
 export interface PlanOptions {
   /** Custom system prompt to override the default */
   customPrompt?: string;
   /** Model to use for planning (from the AI library) */
-  model?: any;
+  model?: AIModel;
   /** Temperature for the LLM (0.0 to 1.0) */
   temperature?: number;
   /** Whether to include the research plan in the final results */

@@ -4,8 +4,10 @@
  */
 import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
-import { ResearchState } from '../types/pipeline';
+import { ResearchState, FactCheckResult as StateFactCheckResult, ExtractedContent as StateExtractedContent } from '../types/pipeline';
+import { StepOptions } from '../types/pipeline';
 import { z } from 'zod';
+import { AIModel } from './plan';
 
 /**
  * Schema for fact check results
@@ -24,11 +26,11 @@ export type FactCheckResult = z.infer<typeof factCheckResultSchema>;
 /**
  * Options for the fact checking step
  */
-export interface FactCheckOptions {
+export interface FactCheckOptions extends StepOptions {
   /** Minimum confidence threshold for validation (0.0 to 1.0) */
   threshold?: number;
   /** Model to use for fact checking */
-  model?: any;
+  model?: AIModel;
   /** Whether to include evidence in the output */
   includeEvidence?: boolean;
   /** Whether to include fact check results in the final results */
@@ -37,6 +39,8 @@ export interface FactCheckOptions {
   statements?: string[];
   /** Maximum number of statements to check */
   maxStatements?: number;
+  /** Custom prompt for the fact-checking LLM */
+  customPrompt?: string;
 }
 
 /**
@@ -68,6 +72,7 @@ async function executeFactCheckStep(
     includeInResults = true,
     statements = [],
     maxStatements = 10,
+    customPrompt,
   } = options;
 
   // Get statements to fact check
@@ -90,7 +95,7 @@ async function executeFactCheckStep(
   
   // For now, simulate fact checking results
   // In a real implementation, this would use an LLM to validate statements
-  const factCheckResults: FactCheckResult[] = await simulateFactChecking(
+  const factCheckResults: StateFactCheckResult[] = await simulateFactChecking(
     statementsToCheck,
     threshold,
     includeEvidence
@@ -135,11 +140,11 @@ async function executeFactCheckStep(
 }
 
 /**
- * Simulates extracting statements from content
+ * Extracts statements from content for fact checking
  * In a real implementation, this would use NLP or an LLM
  */
 async function extractStatementsFromContent(
-  extractedContent: any[],
+  extractedContent: StateExtractedContent[],
   maxStatements: number
 ): Promise<string[]> {
   // Simulate extraction by splitting content into sentences
@@ -177,7 +182,7 @@ async function simulateFactChecking(
   statements: string[],
   threshold: number,
   includeEvidence: boolean
-): Promise<FactCheckResult[]> {
+): Promise<StateFactCheckResult[]> {
   // Simulate a delay as if we're calling an LLM
   await new Promise(resolve => setTimeout(resolve, 1000));
   
@@ -187,7 +192,7 @@ async function simulateFactChecking(
     const isValid = Math.random() > 0.3;
     const confidence = 0.6 + Math.random() * 0.4; // Between 0.6 and 1.0
     
-    const result: FactCheckResult = {
+    const result: StateFactCheckResult = {
       statement,
       isValid,
       confidence,
@@ -239,7 +244,7 @@ async function simulateFactChecking(
 export function factCheck(options: FactCheckOptions = {}): ReturnType<typeof createStep> {
   return createStep('FactCheck', 
     // Wrapper function that matches the expected signature
-    async (state: ResearchState, opts?: Record<string, any>) => {
+    async (state: ResearchState, opts?: StepOptions) => {
       return executeFactCheckStep(state, options);
     }, 
     options

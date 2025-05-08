@@ -4,23 +4,30 @@
  */
 import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
-import { ResearchState } from '../types/pipeline';
+import { ResearchState, ExtractedContent, FactCheckResult } from '../types/pipeline';
+import { StepOptions } from '../types/pipeline';
 import { z } from 'zod';
+import { AIModel } from './plan';
+
+/**
+ * Format options for summary output
+ */
+export type SummaryFormat = 'paragraph' | 'bullet' | 'structured';
 
 /**
  * Options for the summarization step
  */
-export interface SummarizeOptions {
+export interface SummarizeOptions extends StepOptions {
   /** Maximum length of the generated summary (characters) */
   maxLength?: number;
   /** Model to use for summarization */
-  model?: any;
+  model?: AIModel;
   /** Temperature for the LLM generation (0.0 to 1.0) */
   temperature?: number;
   /** Format for the summary (paragraph, bullet, structured) */
-  format?: 'paragraph' | 'bullet' | 'structured';
+  format?: SummaryFormat;
   /** Focus areas for the summary (aspects to emphasize) */
-  focus?: string[];
+  focus?: string | string[];
   /** Whether to include citations in the summary */
   includeCitations?: boolean;
   /** Whether to add the summary to the final results */
@@ -67,11 +74,11 @@ async function executeSummarizeStep(
   } = options;
 
   // Get content to summarize
-  const contentToSummarize = [];
+  const contentToSummarize: string[] = [];
   
   // Add extracted content if available
   if (state.data.extractedContent) {
-    contentToSummarize.push(...state.data.extractedContent.map((item: any) => item.content));
+    contentToSummarize.push(...state.data.extractedContent.map((item: ExtractedContent) => item.content));
   }
   
   // Add research plan if available
@@ -81,8 +88,8 @@ async function executeSummarizeStep(
   
   // Add factual information if available
   if (state.data.factChecks) {
-    const validFactChecks = state.data.factChecks.filter((check: any) => check.isValid);
-    contentToSummarize.push(...validFactChecks.map((check: any) => check.statement));
+    const validFactChecks = state.data.factChecks.filter((check: FactCheckResult) => check.isValid);
+    contentToSummarize.push(...validFactChecks.map((check: FactCheckResult) => check.statement));
   }
   
   if (contentToSummarize.length === 0) {
@@ -92,6 +99,9 @@ async function executeSummarizeStep(
 
   console.log(`Summarizing ${contentToSummarize.length} content items...`);
   
+  // Normalize focus to array if it's a string
+  const focusArray = typeof focus === 'string' ? [focus] : focus;
+  
   // For now, simulate summary generation
   // In a real implementation, this would use an LLM to generate a summary
   const summary = await simulateSummaryGeneration(
@@ -99,7 +109,7 @@ async function executeSummarizeStep(
     state.query,
     maxLength,
     format,
-    focus,
+    focusArray,
     includeCitations,
     additionalInstructions
   );
@@ -135,7 +145,7 @@ async function simulateSummaryGeneration(
   contentItems: string[],
   query: string,
   maxLength: number,
-  format: string,
+  format: SummaryFormat,
   focus: string[],
   includeCitations: boolean,
   additionalInstructions?: string
@@ -241,7 +251,7 @@ async function simulateSummaryGeneration(
 export function summarize(options: SummarizeOptions = {}): ReturnType<typeof createStep> {
   return createStep('Summarize', 
     // Wrapper function that matches the expected signature
-    async (state: ResearchState, opts?: Record<string, any>) => {
+    async (state: ResearchState, opts?: StepOptions) => {
       return executeSummarizeStep(state, options);
     }, 
     options
