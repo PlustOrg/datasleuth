@@ -5,6 +5,8 @@
 import { createStep } from '../utils/steps';
 import { ResearchState, ExtractedContent as StateExtractedContent, SearchResult } from '../types/pipeline';
 import { StepOptions } from '../types/pipeline';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 /**
  * Options for the content extraction step
@@ -99,15 +101,19 @@ async function executeExtractContentStep(
   const urlsToProcess = searchResults.slice(0, maxUrls);
   const extractedContents: StateExtractedContent[] = [];
 
-  // For now, simulate content extraction
-  // In a real implementation, this would use fetch and a DOM parser
+  // Process each URL and extract content
   for (const result of urlsToProcess) {
     try {
-      const extractedContent = await simulateContentExtraction(
+      const extractedContent = await extractContentFromURL(
         result.url,
         result.title || '',
         selectors,
-        maxContentLength
+        maxContentLength,
+        timeout,
+        { 
+          maxRetries: retry.maxRetries ?? 2,  // Ensure non-undefined values
+          baseDelay: retry.baseDelay ?? 500
+        }
       );
       
       extractedContents.push(extractedContent);
@@ -137,46 +143,129 @@ async function executeExtractContentStep(
 }
 
 /**
- * Temporary function to simulate content extraction
- * This will be replaced with actual web scraping in the full implementation
+ * Extracts content from a URL using the provided selectors
  */
-async function simulateContentExtraction(
+async function extractContentFromURL(
   url: string,
   title: string,
   selectors: string,
-  maxLength: number
+  maxLength: number,
+  timeout: number,
+  retry: { maxRetries: number; baseDelay: number }
 ): Promise<StateExtractedContent> {
-  // Simulate a delay as if we're fetching and parsing content
-  await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 700));
+  let retries = 0;
+  let lastError: Error | null = null;
   
-  // For simulation, create content based on the URL and title
-  const domain = new URL(url).hostname;
-  
-  // Generate simulated content
-  const contentLength = Math.min(1000 + Math.floor(Math.random() * 5000), maxLength);
-  let content = `This is simulated content extracted from ${domain}. `;
-  content += `The page title is "${title}". `;
-  content += `The content was extracted using selectors: ${selectors}. `;
-  content += `Here's some more simulated content to reach the desired length... `;
-  
-  // Pad content to reach contentLength
-  while (content.length < contentLength) {
-    content += `The topic of this page appears to be related to ${title.toLowerCase()}. `;
-    content += `Various facts and information about this topic would be presented here. `;
+  // Attempt with retries
+  while (retries <= retry.maxRetries) {
+    try {
+      // If not the first attempt, delay based on retry count
+      if (retries > 0) {
+        const delayTime = retry.baseDelay * Math.pow(2, retries - 1); // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delayTime));
+        console.log(`Retrying ${url} (attempt ${retries} of ${retry.maxRetries})...`);
+      }
+      
+      // Fetch the content
+      const response = await axios.get(url, {
+        timeout,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5'
+        },
+        maxRedirects: 5,
+        validateStatus: status => status < 400 // Only allow status codes less than 400
+      });
+      
+      // Load the HTML into cheerio
+      const $ = cheerio.load(response.data);
+      
+      // Extract title if not provided or empty
+      if (!title.trim()) {
+        title = $('title').text().trim() || $('h1').first().text().trim() || url;
+      }
+      
+      // Parse the selectors
+      const selectorList = selectors.split(',').map(s => s.trim());
+      const matchedSelectors: string[] = [];
+      let content = '';
+      
+      // Try each selector until we find content
+      for (const selector of selectorList) {
+        const elements = $(selector);
+        if (elements.length > 0) {
+          // Add selector to matched list
+          matchedSelectors.push(selector);
+          
+          // Extract text from each element
+          elements.each((_, element) => {
+            // Remove script and style elements
+            $(element).find('script, style').remove();
+            
+            // Get text content
+            const elementText = $(element).text().trim();
+            if (elementText) {
+              content += elementText + '\n\n';
+            }
+          });
+        }
+      }
+      
+      // If no content was found with specific selectors, try the body
+      if (!content.trim()) {
+        // Remove unwanted elements
+        $('script, style, nav, header, footer, aside, [role=banner], [role=navigation], .sidebar').remove();
+        
+        // Get body text
+        content = $('body').text().trim();
+        matchedSelectors.push('body');
+      }
+      
+      // Clean up content
+      content = content
+        .replace(/\s+/g, ' ')        // Replace multiple spaces with single space
+        .replace(/\n\s*\n/g, '\n\n') // Replace multiple newlines with double newline
+        .trim();
+      
+      // Truncate if necessary
+      const finalContent = content.length > maxLength 
+        ? content.substring(0, maxLength) + '...' 
+        : content;
+      
+      // Get domain
+      const domain = new URL(url).hostname;
+      
+      // Create timestamp
+      const extractedAt = new Date().toISOString();
+      
+      // Calculate word count (approximate)
+      const wordCount = finalContent.split(/\s+/).filter(Boolean).length;
+      
+      // Return the extracted content
+      // Note: We're not adding metadata as it's not in the StateExtractedContent interface
+      return {
+        url,
+        title,
+        content: finalContent,
+        extractionDate: extractedAt,
+        selector: selectors
+      };
+      
+    } catch (error) {
+      lastError = error as Error;
+      retries++;
+      
+      // If we've exhausted all retries, throw the last error
+      if (retries > retry.maxRetries) {
+        throw new Error(`Failed to extract content from ${url} after ${retry.maxRetries} retries: ${lastError.message}`);
+      }
+    }
   }
   
-  // Trim to max length
-  content = content.substring(0, maxLength);
-
-  const extractedAt = new Date().toISOString();
-
-  return {
-    url,
-    title,
-    content,
-    extractionDate: extractedAt,
-    selector: selectors
-  };
+  // This should never happen due to the throw in the catch block,
+  // but TypeScript requires a return statement
+  throw lastError || new Error(`Failed to extract content from ${url}`);
 }
 
 /**

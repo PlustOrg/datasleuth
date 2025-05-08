@@ -26,30 +26,34 @@ const researchStepSchema = z.object({
   options: z.record(z.string(), z.any()).optional()
 });
 
-// Define the input schema for the research function
-const researchInputSchema = z.object({
-  query: z.string(),
-  outputSchema: z.custom<z.ZodType<ResearchResult>>((val) => val instanceof z.ZodType), 
-  steps: z.array(researchStepSchema).optional(), 
-  config: z.record(z.string(), z.any()).optional(),
-});
-
 /**
  * Main research function - the primary API for the package
  * 
- * @param input The research input with query, output schema, and optional steps
+ * @param input The research input with query, output schema, optional steps, and default LLM
  * @returns The research results in the structure defined by outputSchema
  */
-export async function research(input: unknown): Promise<ResearchResult> {
+export async function research(input: ResearchInput): Promise<ResearchResult> {
   // Validate the input against the schema
-  const validatedInput = researchInputSchema.parse(input) as ResearchInput;
-  const { query, outputSchema, steps = [], config = {} } = validatedInput;
+  const { query, outputSchema, steps = [], config = {}, defaultLLM } = input;
 
   // Create the initial pipeline state
   const initialState = createInitialState(query, outputSchema);
+  
+  // Add the default LLM to the state if provided
+  if (defaultLLM) {
+    initialState.defaultLLM = defaultLLM;
+  }
 
-  // If no steps provided, we'll need to add default steps later
+  // If no steps provided, add default steps
   const pipelineSteps = steps.length > 0 ? steps : getDefaultSteps(query);
+  
+  // If we're using default steps and no defaultLLM is provided, throw an error
+  if (steps.length === 0 && !defaultLLM) {
+    throw new Error(
+      "No language model provided for research. When using default steps, you must provide a defaultLLM parameter. " +
+      "For example: research({ query, outputSchema, defaultLLM: openai('gpt-4o') })"
+    );
+  }
 
   // Execute the pipeline with the provided steps and configuration
   const finalState = await executePipeline(initialState, pipelineSteps, config);
@@ -85,6 +89,8 @@ export interface MockSearchProvider {
  * Get default pipeline steps if none are provided
  * Creates a comprehensive research pipeline with planning, searching, 
  * content extraction, fact checking, and summarization
+ * 
+ * Note: These steps will require a defaultLLM to be provided to the research function
  */
 function getDefaultSteps(query: string): ResearchStep[] {
   // Mock search provider for demonstration
@@ -95,7 +101,7 @@ function getDefaultSteps(query: string): ResearchStep[] {
   };
 
   return [
-    // Start with research planning
+    // Start with research planning (requires an LLM)
     plan({
       includeInResults: false
     }),
@@ -115,14 +121,14 @@ function getDefaultSteps(query: string): ResearchStep[] {
       includeInResults: false
     }),
     
-    // Fact check extracted information
+    // Fact check extracted information (requires an LLM)
     factCheck({
       threshold: 0.7,
       includeEvidence: true,
       includeInResults: false
     }),
     
-    // Summarize the findings
+    // Summarize the findings (requires an LLM)
     summarize({
       maxLength: 2000,
       format: 'structured',

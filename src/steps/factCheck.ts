@@ -97,29 +97,25 @@ async function executeFactCheckStep(
 
   console.log(`Fact checking ${statementsToCheck.length} statements...`);
   
-  // Perform fact checking
-  let factCheckResults: StateFactCheckResult[];
+  // Check for an LLM to use - either from options or from state
+  const modelToUse = llm || state.defaultLLM;
   
-  // Check if an LLM model was provided
-  if (llm) {
-    // Use the provided LLM model for fact checking
-    factCheckResults = await performFactCheckingWithLLM(
-      statementsToCheck,
-      threshold,
-      includeEvidence,
-      llm,
-      temperature,
-      customPrompt
-    );
-  } else {
-    // Fall back to simulated fact checking if no LLM is provided
-    console.warn('No LLM model provided for fact checking step. Using simulated fact checking.');
-    factCheckResults = await simulateFactChecking(
-      statementsToCheck,
-      threshold,
-      includeEvidence
+  // If no LLM is available, throw an error
+  if (!modelToUse) {
+    throw new Error(
+      "No language model provided for fact checking step. Please provide an LLM either in the step options or as a defaultLLM in the research function."
     );
   }
+
+  // Perform fact checking using the LLM
+  const factCheckResults = await performFactCheckingWithLLM(
+    statementsToCheck,
+    threshold,
+    includeEvidence,
+    modelToUse,
+    temperature,
+    customPrompt
+  );
   
   // Calculate overall factual accuracy score
   const validStatements = factCheckResults.filter(result => result.isValid);
@@ -192,67 +188,6 @@ async function extractStatementsFromContent(
   }
   
   return statements;
-}
-
-/**
- * Simulates fact checking using an LLM
- * In a real implementation, this would call an actual LLM
- */
-async function simulateFactChecking(
-  statements: string[],
-  threshold: number,
-  includeEvidence: boolean
-): Promise<StateFactCheckResult[]> {
-  // Simulate a delay as if we're calling an LLM
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  // Generate simulated results
-  return statements.map(statement => {
-    // Randomly determine validity, slightly biased toward true
-    const isValid = Math.random() > 0.3;
-    const confidence = 0.6 + Math.random() * 0.4; // Between 0.6 and 1.0
-    
-    const result: StateFactCheckResult = {
-      statement,
-      isValid,
-      confidence,
-    };
-    
-    // Add evidence if requested
-    if (includeEvidence) {
-      result.evidence = [
-        isValid
-          ? `This statement appears to be accurate based on available information.`
-          : `This statement contains inaccuracies or cannot be verified.`,
-        `Confidence level: ${(confidence * 100).toFixed(1)}%`,
-      ];
-      
-      // Add sample sources
-      result.sources = [
-        'https://example.com/source1',
-        'https://example.com/source2',
-      ];
-      
-      // Add corrections for invalid statements
-      if (!isValid) {
-        result.corrections = `A more accurate statement would be: ${statement.replace(
-          /\b(all|never|always|impossible|definitely)\b/gi,
-          match => {
-            const replacements: Record<string, string> = {
-              all: 'most',
-              never: 'rarely',
-              always: 'often',
-              impossible: 'challenging',
-              definitely: 'likely',
-            };
-            return replacements[match.toLowerCase()] || match;
-          }
-        )}`;
-      }
-    }
-    
-    return result;
-  });
 }
 
 /**

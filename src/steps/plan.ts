@@ -64,17 +64,23 @@ async function executePlanStep(
     llm,
   } = options;
 
-  let researchPlan: ResearchPlan;
-
-  // Check if an LLM model was provided
-  if (llm) {
-    // Use the provided LLM model to generate a research plan
-    researchPlan = await generateResearchPlanWithLLM(state.query, customPrompt, llm, temperature);
-  } else {
-    // Fall back to simulated plan if no LLM is provided
-    console.warn('No LLM model provided for planning step. Using simulated research plan.');
-    researchPlan = await simulateResearchPlan(state.query);
+  // Check for an LLM to use - either from options or from state
+  const modelToUse = llm || state.defaultLLM;
+  
+  // If no LLM is available, throw an error
+  if (!modelToUse) {
+    throw new Error(
+      "No language model provided for planning step. Please provide an LLM either in the step options or as a defaultLLM in the research function."
+    );
   }
+
+  // Generate research plan using the LLM
+  const researchPlan = await generateResearchPlanWithLLM(
+    state.query, 
+    customPrompt, 
+    modelToUse, 
+    temperature
+  );
 
   // Store the plan in state for later steps to use
   const newState = {
@@ -139,47 +145,6 @@ async function generateResearchPlanWithLLM(
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to generate research plan: ${errorMessage}`);
   }
-}
-
-/**
- * Temporary function to simulate a research plan
- * This will be replaced with actual LLM calls
- */
-async function simulateResearchPlan(query: string): Promise<ResearchPlan> {
-  // Simulate a small delay as if we're calling an LLM
-  await new Promise(resolve => setTimeout(resolve, 700));
-
-  // Create a simulated research plan based on the query
-  return {
-    objectives: [
-      'Identify the main aspects of the query',
-      'Gather comprehensive information on the topic',
-      'Find authoritative sources and recent research',
-      'Analyze different perspectives and viewpoints',
-    ],
-    searchQueries: [
-      query,
-      `latest research on ${query}`,
-      `${query} analysis`,
-      `${query} expert opinions`,
-      `${query} statistics`,
-      `${query} case studies`,
-    ],
-    relevantFactors: [
-      'Recency of information',
-      'Credibility of sources',
-      'Different perspectives on the topic',
-      'Practical applications',
-      'Historical context',
-    ],
-    dataGatheringStrategy: 'Use a combination of academic sources, news articles, expert blogs, and statistical databases',
-    expectedOutcomes: [
-      'Comprehensive understanding of the topic',
-      'Identification of key trends and patterns',
-      'Synthesis of different viewpoints',
-      'Actionable insights based on the research',
-    ],
-  };
 }
 
 /**

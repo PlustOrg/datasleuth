@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod';
+import { LanguageModel } from 'ai';
 
 /**
  * Base interface for research data objects
@@ -164,6 +165,8 @@ export interface ResearchState {
   data: ResearchData;
   results: ResearchResult[];
   errors: (Error | ResearchError)[];
+  /** Default language model to use if not specified in a step */
+  defaultLLM?: LanguageModel;
   metadata: {
     startTime: Date;
     endTime?: Date;
@@ -237,10 +240,16 @@ export interface PipelineConfig {
  * Input for the research function
  */
 export interface ResearchInput {
+  /** The research query */
   query: string;
+  /** Schema defining the output structure */
   outputSchema: z.ZodType<ResearchResult>;
+  /** Optional custom pipeline steps */
   steps?: ResearchStep[];
+  /** Optional configuration for the pipeline */
   config?: Partial<PipelineConfig>;
+  /** Default language model to use for LLM-dependent steps */
+  defaultLLM?: LanguageModel;
 }
 
 /**

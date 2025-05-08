@@ -99,34 +99,28 @@ async function executeAnalyzeStep(
     return state;
   }
 
-  let analysisResult: AnalysisResult;
-
-  // Check if an LLM model was provided
-  if (llm) {
-    // Use the provided LLM model to generate the analysis
-    analysisResult = await generateAnalysisWithLLM(
-      contentToAnalyze,
-      state.query,
-      focus,
-      depth,
-      includeEvidence,
-      includeRecommendations,
-      llm,
-      temperature,
-      customPrompt
-    );
-  } else {
-    // Fall back to simulated analysis if no LLM is provided
-    console.warn('No LLM model provided for analysis step. Using simulated analysis.');
-    analysisResult = await simulateAnalysis(
-      contentToAnalyze,
-      state.query,
-      focus,
-      depth,
-      includeEvidence,
-      includeRecommendations
+  // Check for an LLM to use - either from options or from state
+  const modelToUse = llm || state.defaultLLM;
+  
+  // If no LLM is available, throw an error
+  if (!modelToUse) {
+    throw new Error(
+      "No language model provided for analysis step. Please provide an LLM either in the step options or as a defaultLLM in the research function."
     );
   }
+
+  // Generate analysis using the provided LLM
+  const analysisResult = await generateAnalysisWithLLM(
+    contentToAnalyze,
+    state.query,
+    focus,
+    depth,
+    includeEvidence,
+    includeRecommendations,
+    modelToUse,
+    temperature,
+    customPrompt
+  );
   
   // Store the analysis in the appropriate format
   const focusKey = focus.replace(/\s+/g, '-').toLowerCase();
@@ -155,131 +149,6 @@ async function executeAnalyzeStep(
   }
 
   return newState;
-}
-
-/**
- * Simulates analysis generation using an LLM
- * In a real implementation, this would call an actual LLM
- */
-async function simulateAnalysis(
-  contentItems: string[],
-  query: string,
-  focus: string,
-  depth: string,
-  includeEvidence: boolean,
-  includeRecommendations: boolean
-): Promise<AnalysisResult> {
-  // Simulate a delay as if we're calling an LLM
-  await new Promise(resolve => setTimeout(resolve, 1200));
-  
-  // Generate simulated insights based on the focus area
-  const insights: string[] = [];
-  const supportingEvidence: string[] = [];
-  const limitations: string[] = [];
-  const recommendations: string[] = [];
-  
-  // Generate different insights based on the focus area
-  switch (focus.toLowerCase()) {
-    case 'market-trends':
-      insights.push(
-        `The market for ${query} shows consistent growth with a CAGR of approximately 15-20% over the past five years.`,
-        `${query} is seeing increased adoption in emerging markets, particularly in Asia-Pacific and Latin America.`,
-        `Key players are shifting towards more sustainable and cost-effective solutions in the ${query} space.`,
-        `Regulatory changes in North America and Europe are reshaping competitive dynamics in the ${query} market.`
-      );
-      
-      supportingEvidence.push(
-        `Multiple market reports from 2023-2025 confirm the growth trajectory and regional expansion patterns.`,
-        `Earnings calls from major companies in this sector indicate strategic pivots toward sustainability.`
-      );
-      
-      limitations.push(
-        `Limited data on niche market segments within the broader ${query} category.`,
-        `Evolving regulatory landscape makes long-term projections uncertain.`
-      );
-      
-      recommendations.push(
-        `Monitor regulatory developments in key markets to anticipate shifts in demand patterns.`,
-        `Focus on sustainable solutions as this appears to be a key differentiator in the market.`,
-        `Consider strategic partnerships in emerging markets to capitalize on regional growth opportunities.`
-      );
-      break;
-      
-    case 'technical-details':
-      insights.push(
-        `The technological foundation of ${query} relies primarily on advancements in AI and machine learning algorithms.`,
-        `Recent innovations have significantly improved efficiency metrics, with performance gains of 30-40% reported.`,
-        `Integration challenges remain a barrier to widespread adoption of newer ${query} technologies.`,
-        `Open-source developments are accelerating innovation cycles in the ${query} technical ecosystem.`
-      );
-      
-      supportingEvidence.push(
-        `Technical papers from 2024-2025 document the performance improvements and methodological approaches.`,
-        `GitHub repository activity shows increasing community engagement with open-source ${query} projects.`
-      );
-      
-      limitations.push(
-        `Limited benchmarking across different implementation strategies makes direct comparisons difficult.`,
-        `The rapid pace of innovation may lead to fragmentation in standards and approaches.`
-      );
-      
-      recommendations.push(
-        `Invest in compatibility and integration capabilities to address key adoption barriers.`,
-        `Engage with open-source communities to stay current with cutting-edge developments.`,
-        `Develop clear performance metrics aligned with actual use case requirements.`
-      );
-      break;
-      
-    default:
-      // Generic insights for any other focus area
-      insights.push(
-        `Analysis of ${query} reveals important patterns related to ${focus}.`,
-        `Key stakeholders are increasingly attentive to ${focus} aspects of ${query}.`,
-        `There appears to be a correlation between ${focus} and overall outcomes in ${query} implementations.`,
-        `Comparative assessment suggests that ${focus} is becoming a critical success factor for ${query}.`
-      );
-      
-      supportingEvidence.push(
-        `Multiple sources highlight the significance of ${focus} in relation to ${query}.`,
-        `Empirical data supports the correlation between ${focus} factors and outcomes.`
-      );
-      
-      limitations.push(
-        `The research on ${focus} in the context of ${query} is still developing.`,
-        `Methodological variations make it difficult to generalize findings across different contexts.`
-      );
-      
-      recommendations.push(
-        `Develop a systematic approach to incorporate ${focus} considerations into ${query} strategies.`,
-        `Establish metrics to track the impact of ${focus} on overall performance and outcomes.`,
-        `Collaborate with experts in ${focus} to enhance ${query} initiatives.`
-      );
-  }
-  
-  // Adjust depth of analysis
-  if (depth === 'basic') {
-    // Reduce the number of insights for basic analysis
-    insights.length = Math.min(2, insights.length);
-    supportingEvidence.length = Math.min(1, supportingEvidence.length);
-    limitations.length = Math.min(1, limitations.length);
-    recommendations.length = Math.min(1, recommendations.length);
-  } else if (depth === 'comprehensive') {
-    // Add more detailed insights for comprehensive analysis
-    insights.push(`Long-term trajectory analysis suggests that ${focus} aspects of ${query} will continue to evolve in response to broader industry and societal trends.`);
-    supportingEvidence.push(`Cross-industry comparisons provide additional context for understanding the evolution of ${focus} in relation to ${query}.`);
-    limitations.push(`The interplay between ${focus} and other factors creates complexity that requires nuanced analysis.`);
-    recommendations.push(`Establish a continuous monitoring process to track developments in ${focus} as they relate to ${query} over time.`);
-  }
-  
-  // Final analysis result
-  return {
-    focus,
-    insights,
-    confidence: 0.75 + (Math.random() * 0.2), // Between 0.75 and 0.95
-    supportingEvidence: includeEvidence ? supportingEvidence : undefined,
-    limitations,
-    recommendations: includeRecommendations ? recommendations : undefined,
-  };
 }
 
 /**

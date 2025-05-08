@@ -103,36 +103,29 @@ async function executeSummarizeStep(
   // Normalize focus to array if it's a string
   const focusArray = typeof focus === 'string' ? [focus] : focus;
   
-  let summary: string;
+  // Check for an LLM to use - either from options or from state
+  const modelToUse = llm || state.defaultLLM;
   
-  // Check if an LLM model was provided
-  if (llm) {
-    // Use the provided LLM model to generate a summary
-    summary = await generateSummaryWithLLM(
-      contentToSummarize,
-      state.query,
-      maxLength,
-      format,
-      focusArray,
-      includeCitations,
-      additionalInstructions,
-      llm,
-      temperature,
-      customPrompt
-    );
-  } else {
-    // Fall back to simulated summary if no LLM is provided
-    console.warn('No LLM model provided for summarization step. Using simulated summary.');
-    summary = await simulateSummaryGeneration(
-      contentToSummarize,
-      state.query,
-      maxLength,
-      format,
-      focusArray,
-      includeCitations,
-      additionalInstructions
+  // If no LLM is available, throw an error
+  if (!modelToUse) {
+    throw new Error(
+      "No language model provided for summarization step. Please provide an LLM either in the step options or as a defaultLLM in the research function."
     );
   }
+
+  // Generate summary using the provided LLM
+  const summary = await generateSummaryWithLLM(
+    contentToSummarize,
+    state.query,
+    maxLength,
+    format,
+    focusArray,
+    includeCitations,
+    additionalInstructions,
+    modelToUse,
+    temperature,
+    customPrompt
+  );
   
   // Update state with summary
   const newState = {
@@ -155,111 +148,6 @@ async function executeSummarizeStep(
   }
 
   return newState;
-}
-
-/**
- * Simulates summary generation using an LLM
- * In a real implementation, this would call an actual LLM
- */
-async function simulateSummaryGeneration(
-  contentItems: string[],
-  query: string,
-  maxLength: number,
-  format: SummaryFormat,
-  focus: string[],
-  includeCitations: boolean,
-  additionalInstructions?: string
-): Promise<string> {
-  // Simulate a delay as if we're calling an LLM
-  await new Promise(resolve => setTimeout(resolve, 1500));
-  
-  // Generate a simulated summary based on the query and format
-  const queryTerms = query.toLowerCase().split(/\s+/);
-  const focusTerms = focus.flatMap(f => f.toLowerCase().split(/\s+/));
-  const allTerms = [...new Set([...queryTerms, ...focusTerms])];
-  
-  // Create intro paragraph
-  let summary = `Based on comprehensive research on ${query}, several key insights emerge. `;
-  summary += `The findings indicate significant developments in this area with implications for various sectors. `;
-  
-  // Add simulated content based on the query
-  const contentParagraphs = [
-    `Research shows that ${query} has been a topic of increasing interest in recent years. `,
-    `Multiple sources confirm the importance of ${query} in contemporary contexts. `,
-    `Experts in the field have emphasized the need for further investigation into ${query}. `,
-    `Analysis of available data reveals patterns related to ${query} that merit attention. `,
-    `The evolution of ${query} demonstrates both challenges and opportunities for stakeholders. `,
-  ];
-  
-  // Add additional instructions-based content if provided
-  if (additionalInstructions) {
-    summary += `\nFollowing specific analysis directives: ${additionalInstructions.substring(0, 100)}... `;
-  }
-  
-  // Add focus-specific content if specified
-  if (focus.length > 0) {
-    summary += `Particularly noteworthy aspects include ${focus.join(', ')}. `;
-    
-    for (const focusArea of focus) {
-      summary += `Regarding ${focusArea}, the research indicates notable trends and considerations. `;
-    }
-  }
-  
-  // Add content paragraphs
-  if (format === 'paragraph') {
-    // Add content paragraphs for paragraph format
-    for (const paragraph of contentParagraphs) {
-      if (summary.length + paragraph.length < maxLength) {
-        summary += paragraph;
-      }
-    }
-    
-    // Add conclusion
-    if (summary.length + 100 < maxLength) {
-      summary += `In conclusion, the research on ${query} points to evolving understanding and applications. `;
-      summary += `Future developments will likely build on these foundations while addressing current limitations.`;
-    }
-  } else if (format === 'bullet') {
-    // Format as bullet points
-    summary += `\n\nKey findings include:\n\n`;
-    
-    for (let i = 0; i < contentParagraphs.length; i++) {
-      const bullet = `• ${contentParagraphs[i]}`;
-      if (summary.length + bullet.length < maxLength) {
-        summary += bullet;
-      }
-    }
-  } else if (format === 'structured') {
-    // Format as structured summary with sections
-    summary += `\n\n## Key Findings\n\n`;
-    for (let i = 0; i < Math.min(contentParagraphs.length, 3); i++) {
-      if (summary.length + contentParagraphs[i].length + 20 < maxLength) {
-        summary += `### Point ${i + 1}\n${contentParagraphs[i]}\n\n`;
-      }
-    }
-    
-    // Add implications section
-    if (summary.length + 150 < maxLength) {
-      summary += `## Implications\n\nThe research has significant implications for various stakeholders, `;
-      summary += `suggesting potential directions for future work and applications.`;
-    }
-  }
-  
-  // Add citations if requested
-  if (includeCitations) {
-    if (summary.length + 100 < maxLength) {
-      summary += `\n\n## Sources\n\n`;
-      summary += `1. Smith, J. (2024). Understanding ${query}. Journal of Research Studies.\n`;
-      summary += `2. Brown, A. et al. (2025). Advances in ${query}. International Conference Proceedings.\n`;
-    }
-  }
-  
-  // Ensure we're within the max length
-  if (summary.length > maxLength) {
-    summary = summary.substring(0, maxLength - 3) + '...';
-  }
-  
-  return summary;
 }
 
 /**

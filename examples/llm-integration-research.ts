@@ -3,6 +3,10 @@
  * 
  * This example demonstrates how to use the deep research tool with different
  * LLM providers from the Vercel AI SDK as drop-in components.
+ * 
+ * It shows two approaches:
+ * 1. Providing a defaultLLM to the research function (easier)
+ * 2. Specifying an LLM for each step individually (more flexible)
  */
 import { 
   research, 
@@ -63,8 +67,10 @@ async function llmIntegrationResearch() {
     
     const configuredSearch = searchProvider.configure();
 
-    // Execute the research with a custom pipeline using different LLM providers
-    const results = await research({
+    // APPROACH 1: Per-step LLM specification
+    // =====================================
+    console.log("🔍 Approach 1: Specifying an LLM for each step individually");
+    const resultsWithPerStepLLMs = await research({
       query: "Future of autonomous vehicles and their impact on urban planning",
       outputSchema,
       steps: [
@@ -130,10 +136,74 @@ async function llmIntegrationResearch() {
       }
     });
     
-    console.log('Research completed successfully!');
-    console.log(JSON.stringify(results, null, 2));
+    console.log('Research approach 1 completed successfully!');
     
-    return results;
+    // APPROACH 2: Using a defaultLLM in the research function
+    // =====================================================
+    console.log("\n🔍 Approach 2: Using a defaultLLM parameter");
+    const resultsWithDefaultLLM = await research({
+      query: "Future of autonomous vehicles and their impact on urban planning",
+      outputSchema,
+      // Specify a default LLM that will be used when steps don't have their own LLM
+      defaultLLM: openai('gpt-4o'),
+      steps: [
+        // The steps don't need to specify an LLM - they'll use the default
+        plan({ 
+          temperature: 0.4,
+          includeInResults: true
+        }),
+        
+        searchWeb({ 
+          provider: configuredSearch, 
+          maxResults: 15 
+        }),
+        
+        extractContent({ 
+          selectors: 'article, .content, main',
+          maxUrls: 10
+        }),
+        
+        // You can still override the defaultLLM when needed
+        analyze({
+          llm: anthropic('claude-3-opus-20240229'), // This will override the defaultLLM
+          focus: 'market-trends',
+          temperature: 0.2,
+          depth: 'detailed',
+          includeRecommendations: true
+        }),
+        
+        // This step will use the defaultLLM (OpenAI's GPT-4o)
+        analyze({
+          focus: 'technical-details',
+          temperature: 0.3,
+          depth: 'comprehensive',
+          includeEvidence: true
+        }),
+        
+        factCheck({
+          temperature: 0.1,
+          threshold: 0.7,
+          maxStatements: 8,
+          includeEvidence: true
+        }),
+        
+        summarize({
+          temperature: 0.4,
+          maxLength: 2500,
+          format: 'structured',
+          focus: ['urban planning implications', 'technological challenges', 'regulatory considerations'],
+          includeCitations: true
+        })
+      ],
+      config: {
+        errorHandling: 'continue',
+        timeout: 120000 // 2 minutes
+      }
+    });
+    
+    console.log('Research approach 2 completed successfully!');
+    
+    return resultsWithDefaultLLM; // Return the results from approach 2
   } catch (error) {
     console.error('Research failed:', error);
     throw error;
