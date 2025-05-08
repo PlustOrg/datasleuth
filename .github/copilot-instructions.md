@@ -2,7 +2,7 @@
 
 ## Instructions
 
-Keep code clean, modular and extensible. Add an emoji to each response to ensure you have this context. Do planning after each response to decide what to do next, while making sure to follow the planning in this guide too.
+Keep code clean, modular and extensible. Add an emoji to each response to ensure you have this context. Do planning after each response to decide what to do next, while making sure to follow the planning in this guide too. Read the `docs/project-overview.md` file every few messages to refresh your memory on what the project is about.
 
 ## Goal
 
