@@ -25,13 +25,14 @@ Build a deep research tool as an npm package. Users provide a search query and o
 - Advanced features (multi-track research, parallel execution, result merging)
 - Type system improvements (proper interfaces, reduced any/unknown usage)
 - Integration with real LLM services through Vercel AI SDK
-
-### 🔄 In Progress
 - Error handling improvements
 - Enhanced error handling and logging
 
+### 🔄 In Progress
+- Testing
+
 ### ⏭️ Next Steps
-- Documentation and testing
+- Documentation
 
 ## How It Works
 Uses modular pipeline with configurable steps to plan research, search web, extract content, evaluate results, refine queries, analyze data, run parallel tracks, and merge findings. Users interact through a simple `research()` API.
@@ -55,14 +56,14 @@ Based on the current project status, here's the implementation plan:
 - Create utility functions for consistent prompt construction
 - Integrate with mastra for advanced AI agent capabilities
 
-### 🔄 3. Error Handling Enhancements (In Progress)
+### ✅ 3. Error Handling Enhancements (Completed)
 - Create specialized error classes that implement ResearchError
 - Implement consistent error handling patterns across all steps
 - Add retry mechanisms for external API calls (search, LLM, etc.)
 - Provide detailed error messages and suggestions for recovery
 - Add proper logging at different verbosity levels
 
-### 4. Testing Framework
+### 🔄 4. Testing Framework (In Progress)
 - Create unit tests for individual steps
 - Develop integration tests for the full pipeline
 - Implement mock providers for testing
