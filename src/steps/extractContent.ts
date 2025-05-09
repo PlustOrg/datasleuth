@@ -80,10 +80,10 @@ export interface ExtractedContent {
   title: string;
   /** The extracted text content */
   content: string;
-  /** ISO timestamp of when the content was extracted */
-  extractedAt: string;
   /** Additional metadata about the extraction */
   metadata?: ExtractedContentMetadata;
+  /** Extraction date */
+  extractionDate?: string;
 }
 
 /**
@@ -503,8 +503,8 @@ async function extractContentFromURL(
         url,
         title,
         content: finalContent,
-        extractedAt,
-        metadata
+        metadata,
+        extractionDate: extractedAt  // Add the extractionDate field to match the pipeline.ts interface
       };
       
     } catch (error) {

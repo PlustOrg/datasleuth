@@ -2,7 +2,7 @@
  * Flow control utilities for the research pipeline
  * Implements conditional iteration and evaluation steps
  */
-import { createStep, createCompositeStep } from '../utils/steps';
+import { createStep } from '../utils/steps';
 import { ResearchState, ResearchStep } from '../types/pipeline';
 import { 
   ValidationError, 

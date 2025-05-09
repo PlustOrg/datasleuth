@@ -50,6 +50,7 @@ export interface OrchestrationIteration {
   toolChosen: string;
   reasoning: string;
   timestamp: string;
+  error?: string; // Add missing error property
 }
 
 /**
@@ -139,7 +140,7 @@ async function executeOrchestrationStep(
     // For now, we'll simulate the agent's decisions with proper error handling
     
     // Store the tools in the state for reference
-    let currentState = {
+    let currentState: ResearchState = {
       ...state,
       data: {
         ...state.data,
@@ -296,12 +297,12 @@ async function executeOrchestrationStep(
     }
 
     // Synthesize results (in a real implementation, this would be done by the LLM)
-    const successfulIterations = currentState.data.orchestration.iterations.filter(i => !i.error).length;
+    const successfulIterations = currentState.data.orchestration.iterations.filter((i: OrchestrationIteration) => !i.error).length;
     const totalIterations = currentState.data.orchestration.iterations.length;
     
     const orchestrationResult = {
       summary: `Completed ${totalIterations} iterations of orchestrated research for query: ${state.query}`,
-      toolsUsed: currentState.data.orchestration.iterations.map(i => i.toolChosen),
+      toolsUsed: currentState.data.orchestration.iterations.map((i: OrchestrationIteration) => i.toolChosen),
       successRate: totalIterations > 0 ? successfulIterations / totalIterations : 0,
       confidence: 0.8 * (successfulIterations / Math.max(1, totalIterations)), // Scale confidence by success rate
       errors: toolErrors.length > 0,
@@ -332,7 +333,7 @@ async function executeOrchestrationStep(
         results: [...finalState.results, 
           { 
             orchestrationResult,
-            iterations: currentState.data.orchestration.iterations.map(i => ({
+            iterations: currentState.data.orchestration.iterations.map((i: OrchestrationIteration) => ({
               iteration: i.iteration,
               tool: i.toolChosen,
               timestamp: i.timestamp,

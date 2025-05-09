@@ -158,6 +158,36 @@ export class PipelineError extends BaseResearchError {
 }
 
 /**
+ * Error thrown when processing operations fail
+ */
+export class ProcessingError extends BaseResearchError {
+  constructor(options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'>) {
+    super({ ...options, code: 'processing_error' });
+    this.name = 'ProcessingError';
+  }
+}
+
+/**
+ * Error thrown when an operation times out
+ */
+export class TimeoutError extends BaseResearchError {
+  constructor(options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'>) {
+    super({ ...options, code: 'timeout_error' });
+    this.name = 'TimeoutError';
+  }
+}
+
+/**
+ * Error thrown when maximum iterations are reached
+ */
+export class MaxIterationsError extends BaseResearchError {
+  constructor(options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'>) {
+    super({ ...options, code: 'max_iterations_error' });
+    this.name = 'MaxIterationsError';
+  }
+}
+
+/**
  * Type guard to check if an error is a ResearchError
  */
 export function isResearchError(error: unknown): error is ResearchError {
@@ -208,6 +238,41 @@ export function isValidationError(error: unknown): error is ValidationError {
  */
 export function isConfigurationError(error: unknown): error is ConfigurationError {
   return error instanceof ConfigurationError;
+}
+
+/**
+ * Type guard to check if an error is a ProcessingError
+ */
+export function isProcessingError(error: unknown): error is ProcessingError {
+  return error instanceof ProcessingError;
+}
+
+/**
+ * Type guard to check if an error is a TimeoutError
+ */
+export function isTimeoutError(error: unknown): error is TimeoutError {
+  return error instanceof TimeoutError;
+}
+
+/**
+ * Type guard to check if an error is a MaxIterationsError
+ */
+export function isMaxIterationsError(error: unknown): error is MaxIterationsError {
+  return error instanceof MaxIterationsError;
+}
+
+/**
+ * Type guard to check if an error is an ExtractionError
+ */
+export function isExtractionError(error: unknown): error is ExtractionError {
+  return error instanceof ExtractionError;
+}
+
+/**
+ * Type guard to check if an error is a PipelineError
+ */
+export function isPipelineError(error: unknown): error is PipelineError {
+  return error instanceof PipelineError;
 }
 
 /**

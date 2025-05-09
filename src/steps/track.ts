@@ -3,7 +3,7 @@
  * A track represents a distinct research path that can run in parallel with others
  */
 import { createStep } from '../utils/steps';
-import { ResearchState } from '../types/pipeline';
+import { ResearchState, ResearchStep } from '../types/pipeline';
 import { z } from 'zod';
 import { 
   ValidationError, 
@@ -19,7 +19,7 @@ export interface TrackOptions {
   /** The name of this research track (used for identification in results) */
   name: string;
   /** Steps to execute in this track */
-  steps: any[];
+  steps: ResearchStep[];
   /** Whether to keep the track's data isolated from other tracks */
   isolate?: boolean;
   /** Whether to include this track's results in the final results object */
@@ -45,13 +45,13 @@ export interface TrackOptions {
 const trackResultSchema = z.object({
   name: z.string(),
   results: z.array(z.any()),
-  data: z.record(z.any()).optional(),
+  data: z.record(z.any()),  // Changed from optional to required
   metadata: z.record(z.any()).optional(),
   errors: z.array(z.object({
     message: z.string(),
     step: z.string().optional(),
     code: z.string().optional()
-  })).optional(),
+  })),  // Removed optional here
   completed: z.boolean()
 });
 
@@ -198,7 +198,7 @@ async function executeTrackStep(
     const trackResult: TrackResult = {
       name,
       results: currentState.results,
-      data: currentState.data,
+      data: currentState.data || {}, // Initialize with empty object if undefined
       metadata: {
         ...metadata,
         description,

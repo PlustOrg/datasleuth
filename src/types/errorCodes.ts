@@ -40,6 +40,11 @@ export type ErrorCode =
   | 'selector_not_found'
   | 'invalid_content_format'
   
+  // Processing errors
+  | 'processing_error'
+  | 'timeout_error'
+  | 'max_iterations_error'
+  
   // Pipeline execution errors
   | 'pipeline_error'
   | 'step_execution_error'
@@ -91,6 +96,11 @@ export const ERROR_CODE_DESCRIPTIONS: Record<ErrorCode, string> = {
   'extraction_error': 'Failed to extract content from the source',
   'selector_not_found': 'The specified selector was not found in the document',
   'invalid_content_format': 'The content format is invalid or unsupported',
+  
+  // Processing errors
+  'processing_error': 'An error occurred during processing',
+  'timeout_error': 'The operation timed out',
+  'max_iterations_error': 'The maximum number of iterations was exceeded',
   
   // Pipeline execution errors
   'pipeline_error': 'An error occurred during pipeline execution',

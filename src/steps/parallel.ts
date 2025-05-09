@@ -9,7 +9,8 @@ import {
   ValidationError, 
   ConfigurationError,  
   ProcessingError,
-  TimeoutError
+  TimeoutError,
+  BaseResearchError
 } from '../types/errors';
 import { logger, createStepLogger } from '../utils/logging';
 
@@ -17,13 +18,7 @@ import { logger, createStepLogger } from '../utils/logging';
  * Custom error for parallel execution issues
  */
 export class ParallelError extends ProcessingError {
-  constructor(options: {
-    message: string;
-    step: string;
-    details?: Record<string, any>;
-    retry?: boolean;
-    suggestions?: string[];
-  }) {
+  constructor(options: Omit<ConstructorParameters<typeof ProcessingError>[0], 'code'>) {
     super(options);
     this.name = 'ParallelError';
   }
@@ -262,8 +257,8 @@ async function executeParallelStep(
       
       // Calculate success metrics
       const completedTracks = Object.values(trackResults).filter(t => t.completed).length;
-      const failedTracks = Object.values(trackResults).filter(t => !t.completed).length;
-      const successRate = completedTracks / Object.keys(trackResults).length;
+      const failedTracks = Object.keys(trackResults).length - completedTracks;
+      const successRate = Object.keys(trackResults).length > 0 ? completedTracks / Object.keys(trackResults).length : 0;
       
       stepLogger.info(`Parallel execution complete: ${completedTracks}/${Object.keys(trackResults).length} tracks successful (${(successRate * 100).toFixed(1)}%)`);
       
@@ -281,8 +276,8 @@ async function executeParallelStep(
             count: Object.keys(trackResults).length,
             completed: completedTracks,
             failed: failedTracks,
-            successRate
-          },
+            successRate: successRate
+          } as Record<string, any>,
           parallelCompletedAt: new Date().toISOString()
         }
       };

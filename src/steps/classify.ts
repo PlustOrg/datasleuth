@@ -92,7 +92,7 @@ export interface EntityRelationship {
  */
 export interface EntityCluster {
   name: string;
-  theme: string;
+  description: string; // Changed from 'theme' to 'description' to match pipeline.ts
   entities: string[];
   confidence: number;
 }
@@ -265,12 +265,15 @@ async function executeClassifyStep(
  * This will be replaced with an actual implementation using mastra and the ai SDK
  */
 async function simulateEntityClassification(
-  content: string[],
+  extractedContent: any[], // Changed from 'content: string[]' to accept ExtractedContent[]
   query: string,
   options: ClassifyOptions
 ): Promise<ClassificationData> {
   // Simulate processing time
   await new Promise(resolve => setTimeout(resolve, 1200));
+  
+  // Extract actual text content from ExtractedContent objects
+  const textContent = extractedContent.map(item => item.content || '').filter(Boolean);
   
   // Sample entities based on common topics - will be replaced with real LLM-based extraction
   const entities: Record<string, Entity> = {};
@@ -325,7 +328,7 @@ async function simulateEntityClassification(
     // Add a cluster
     clusters['space_exploration'] = {
       name: 'Space Exploration',
-      theme: 'Organizations and targets involved in space exploration efforts',
+      description: 'Organizations and targets involved in space exploration efforts',
       entities: ['nasa', 'spacex', 'mars'],
       confidence: 0.9
     };
@@ -361,7 +364,7 @@ async function simulateEntityClassification(
     // Add a cluster
     clusters['climate_research'] = {
       name: 'Climate Research',
-      theme: 'Organizations and concepts related to climate science',
+      description: 'Organizations and concepts related to climate science',
       entities: ['climate_change', 'ipcc'],
       confidence: 0.88
     };
