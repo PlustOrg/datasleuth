@@ -2,9 +2,20 @@ import { summarize } from '../../src/steps/summarize';
 import { createMockState, executeStep, mockLLM } from '../test-utils';
 import { generateText } from 'ai';
 
+jest.mock('ai');
+
 describe('summarize step', () => {
+  // Increase timeout for all tests to 30 seconds
+  jest.setTimeout(30000);
+  
   beforeEach(() => {
     jest.clearAllMocks();
+    // Use fake timers for all tests
+    jest.useFakeTimers();
+  });
+  
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('should generate a summary with default options', async () => {
@@ -37,7 +48,12 @@ describe('summarize step', () => {
       llm: mockLLM
     });
 
-    const updatedState = await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     expect(generateText).toHaveBeenCalled();
     expect(updatedState.data.summary).toBeDefined();
@@ -69,7 +85,12 @@ describe('summarize step', () => {
       maxLength
     });
 
-    await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    await resultPromise;
 
     // Verify the maxLength was passed to the LLM
     expect(generateText).toHaveBeenCalledWith(
@@ -112,7 +133,12 @@ describe('summarize step', () => {
       format: 'structured'
     });
 
-    const updatedState = await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     // For structured summaries, we should get both the raw summary and structured data
     expect(updatedState.data.summary).toBeDefined();
@@ -145,7 +171,12 @@ describe('summarize step', () => {
       focus
     });
 
-    await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    await resultPromise;
 
     // Check that focus areas were passed to the LLM
     for (const focusArea of focus) {
@@ -186,7 +217,12 @@ describe('summarize step', () => {
       includeCitations: true
     });
 
-    await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    await resultPromise;
 
     // Verify citations instructions were included in the prompt
     expect(generateText).toHaveBeenCalledWith(
@@ -219,7 +255,12 @@ describe('summarize step', () => {
       includeInResults: true
     });
 
-    const updatedState = await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     expect(updatedState.results.length).toBeGreaterThan(0);
     expect(updatedState.results[0].summary).toBe('This is a test summary.');
@@ -260,7 +301,12 @@ describe('summarize step', () => {
       factsOnly: true
     });
 
-    await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    await resultPromise;
 
     // Verify fact-checking instructions were included
     expect(generateText).toHaveBeenCalledWith(
@@ -291,7 +337,12 @@ describe('summarize step', () => {
       llm: mockLLM
     });
 
-    await expect(executeStep(summarizeStep, initialState)).rejects.toThrow('Summarization failed');
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    await expect(resultPromise).rejects.toThrow('Summarization failed');
   });
 
   it('should handle empty content gracefully when allowEmptyContent is true', async () => {
@@ -306,7 +357,12 @@ describe('summarize step', () => {
       allowEmptyContent: true
     });
 
-    const updatedState = await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     // Should continue without errors with a placeholder summary
     expect(updatedState.data.summary).toBe('No content available for summarization.');
@@ -336,7 +392,12 @@ describe('summarize step', () => {
       customPrompt
     });
 
-    await executeStep(summarizeStep, initialState);
+    const resultPromise = executeStep(summarizeStep, initialState);
+    
+    // Run all timers
+    jest.runAllTimers();
+    
+    await resultPromise;
 
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({

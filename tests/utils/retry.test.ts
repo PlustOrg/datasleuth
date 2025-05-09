@@ -5,18 +5,24 @@ import { executeWithRetry, withRetry } from '../../src/utils/retry';
 import { NetworkError, ApiError } from '../../src/types/errors';
 
 describe('Retry utilities', () => {
-  // Mock the setTimeout function
-  jest.useFakeTimers();
-  
+  // Use fake timers
   beforeEach(() => {
+    jest.useFakeTimers();
     jest.clearAllMocks();
+  });
+  
+  afterEach(() => {
+    jest.useRealTimers();
   });
   
   describe('executeWithRetry', () => {
     it('should execute function successfully without retries', async () => {
       const fn = jest.fn().mockResolvedValue('success');
       
-      const result = await executeWithRetry(fn);
+      const resultPromise = executeWithRetry(fn);
+      
+      // No need to advance timers for the successful case
+      const result = await resultPromise;
       
       expect(result).toBe('success');
       expect(fn).toHaveBeenCalledTimes(1);
@@ -31,10 +37,13 @@ describe('Retry utilities', () => {
       
       const promise = executeWithRetry(fn, { maxRetries: 3, retryDelay: 100 });
       
-      // Fast-forward past the first delay
-      jest.advanceTimersByTime(100);
-      // Fast-forward past the second delay (with backoff factor)
-      jest.advanceTimersByTime(200);
+      // Run pending timers and flushes the micro task queue
+      jest.runOnlyPendingTimers();
+      await Promise.resolve(); // Gives time for the promise to settle
+
+      // Run next timer
+      jest.runOnlyPendingTimers();
+      await Promise.resolve(); // Gives time for the promise to settle
       
       const result = await promise;
       
@@ -50,9 +59,8 @@ describe('Retry utilities', () => {
       
       const promise = executeWithRetry(fn, { maxRetries: 2, retryDelay: 100 });
       
-      // Fast-forward past the delays
-      jest.advanceTimersByTime(100);
-      jest.advanceTimersByTime(200);
+      // Run all pending timers
+      jest.runAllTimers();
       
       await expect(promise).rejects.toThrow('Persistent network error');
       expect(fn).toHaveBeenCalledTimes(3); // Initial + 2 retries
@@ -82,8 +90,8 @@ describe('Retry utilities', () => {
         retryableErrors: customRetryable
       });
       
-      // Fast-forward past the delay
-      jest.advanceTimersByTime(100);
+      // Run all timers
+      jest.runAllTimers();
       
       const result = await promise;
       
@@ -105,8 +113,8 @@ describe('Retry utilities', () => {
         onRetry
       });
       
-      // Fast-forward past the delay
-      jest.advanceTimersByTime(100);
+      // Run all timers
+      jest.runAllTimers();
       
       await promise;
       
@@ -134,10 +142,8 @@ describe('Retry utilities', () => {
         onRetry
       });
       
-      // Fast-forward past the first delay
-      jest.advanceTimersByTime(100);
-      // Fast-forward past the second delay (with backoff factor)
-      jest.advanceTimersByTime(300);
+      // Run all timers
+      jest.runAllTimers();
       
       await promise;
       
@@ -159,8 +165,8 @@ describe('Retry utilities', () => {
       
       const promise = decoratedFn('arg1', 'arg2');
       
-      // Fast-forward past the delay
-      jest.advanceTimersByTime(100);
+      // Run all timers
+      jest.runAllTimers();
       
       const result = await promise;
       
@@ -183,8 +189,8 @@ describe('Retry utilities', () => {
       
       const promise = retryableComplexFn('value1', 'value2', { key: 'test' });
       
-      // Fast-forward past the delay
-      jest.advanceTimersByTime(50);
+      // Run all timers
+      jest.runAllTimers();
       
       const result = await promise;
       

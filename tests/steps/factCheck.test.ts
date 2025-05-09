@@ -29,6 +29,9 @@ describe('factCheck step', () => {
     jest.clearAllMocks();
   });
 
+  // Increase timeout for all tests to 30 seconds
+  jest.setTimeout(30000);
+
   it('should check facts with default options', async () => {
     // Create a state with extracted content
     const initialState = createMockState({

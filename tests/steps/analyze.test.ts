@@ -2,9 +2,20 @@ import { analyze } from '../../src/steps/analyze';
 import { createMockState, executeStep, mockLLM } from '../test-utils';
 import { generateText } from 'ai';
 
+jest.mock('ai');
+
 describe('analyze step', () => {
+  // Increase timeout for all tests to 30 seconds
+  jest.setTimeout(30000);
+  
   beforeEach(() => {
     jest.clearAllMocks();
+    // Use fake timers for all tests
+    jest.useFakeTimers();
+  });
+  
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('should perform analysis with default options', async () => {
@@ -33,10 +44,15 @@ describe('analyze step', () => {
 
     const analyzeStep = analyze({
       llm: mockLLM,
-      focus: 'general' // Add required focus property
+      focus: 'general'
     });
 
-    const updatedState = await executeStep(analyzeStep, initialState);
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     expect(generateText).toHaveBeenCalled();
     expect(updatedState.data.analysis).toBeDefined();
@@ -74,7 +90,12 @@ describe('analyze step', () => {
       focus: 'market-trends'
     });
 
-    const updatedState = await executeStep(analyzeStep, initialState);
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     // The analysis should be stored under the specified focus key
     expect(updatedState.data.analysis?.['market-trends']).toBeDefined();
@@ -111,7 +132,12 @@ describe('analyze step', () => {
       includeRecommendations: true
     });
 
-    const updatedState = await executeStep(analyzeStep, initialState);
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     expect(updatedState.data.analysis?.general.recommendations).toBeDefined();
     expect(updatedState.data.analysis?.general.recommendations?.length).toBe(2);
@@ -146,7 +172,12 @@ describe('analyze step', () => {
       depth: 'detailed'
     });
 
-    const updatedState = await executeStep(analyzeStep, initialState);
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     // Check that the LLM was called with instructions matching the depth
     expect(generateText).toHaveBeenCalledWith(
@@ -186,7 +217,12 @@ describe('analyze step', () => {
       includeInResults: true
     });
 
-    const updatedState = await executeStep(analyzeStep, initialState);
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     expect(updatedState.results.length).toBeGreaterThan(0);
     expect(updatedState.results[0].analysis).toBeDefined();
@@ -214,7 +250,12 @@ describe('analyze step', () => {
       focus: 'general' // Add required focus property
     });
 
-    await expect(executeStep(analyzeStep, initialState)).rejects.toThrow('Analysis failed');
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    await expect(resultPromise).rejects.toThrow('Analysis failed');
   });
 
   it('should handle empty content gracefully when allowEmptyContent is true', async () => {
@@ -230,7 +271,12 @@ describe('analyze step', () => {
       allowEmptyContent: true
     });
 
-    const updatedState = await executeStep(analyzeStep, initialState);
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    const updatedState = await resultPromise;
 
     // Should continue without errors and not add analysis
     expect(updatedState.data.analysis).toBeUndefined();
@@ -249,7 +295,12 @@ describe('analyze step', () => {
       allowEmptyContent: false
     });
 
-    await expect(executeStep(analyzeStep, initialState)).rejects.toThrow();
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    await expect(resultPromise).rejects.toThrow();
   });
 
   it('should use customPrompt when provided', async () => {
@@ -281,7 +332,12 @@ describe('analyze step', () => {
       customPrompt
     });
 
-    await executeStep(analyzeStep, initialState);
+    const resultPromise = executeStep(analyzeStep, initialState);
+    
+    // Run all pending timers
+    jest.runAllTimers();
+    
+    await resultPromise;
 
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({

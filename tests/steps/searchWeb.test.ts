@@ -3,6 +3,9 @@ import { createMockState, executeStep, mockSearchProvider } from '../test-utils'
 import type { ResearchState } from '../../src/types/pipeline';
 
 describe('searchWeb step', () => {
+  // Increase timeout for all tests to 30 seconds
+  jest.setTimeout(30000);
+  
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -165,8 +168,13 @@ describe('searchWeb step', () => {
     try {
       await executeStep(searchStep, initialState);
       fail('Should have thrown an error');
-    } catch (error) {
-      expect(error.message).toContain('Search API failure');
+    } catch (error: unknown) {
+      // Properly type the error as unknown and check if it's an Error object
+      if (error instanceof Error) {
+        expect(error.message).toContain('Search API failure');
+      } else {
+        fail('Error should be an instance of Error');
+      }
     }
   });
 

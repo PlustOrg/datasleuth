@@ -139,7 +139,7 @@ async function executeEvaluateStep(
           ...state.data,
           evaluations: {
             ...(state.data.evaluations || {}),
-            [criteriaName]: evaluationResult
+            [criteriaName]: evaluationResult, // Store only the properly typed object
           },
         },
         metadata: {
@@ -306,11 +306,17 @@ export function repeatUntil(
               ? evaluationKeys[evaluationKeys.length - 1] 
               : null;
             
-            if (evaluationKey && evaluations[evaluationKey].passed) {
-              conditionMet = true;
-              currentState = conditionState;
-              stepLogger.info(`Condition met in iteration ${iterations}, exiting loop`);
-              break;
+            if (evaluationKey) {
+              // Get the evaluation result, which should now always be an EvaluationResult object
+              const evaluation = evaluations[evaluationKey];
+              
+              // Check the passed property to determine if condition is met
+              if (evaluation && typeof evaluation === 'object' && 'passed' in evaluation && evaluation.passed) {
+                conditionMet = true;
+                currentState = conditionState;
+                stepLogger.info(`Condition met in iteration ${iterations}, exiting loop`);
+                break;
+              }
             }
             
             stepLogger.debug(`Condition not met, executing ${stepsToRepeat.length} steps in iteration ${iterations}`);

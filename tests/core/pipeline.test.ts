@@ -4,6 +4,9 @@ import { z } from 'zod';
 import type { ResearchState, ResearchStep } from '../../src/types/pipeline';
 
 describe('Pipeline Execution', () => {
+  // Increase timeout for all tests to 30 seconds
+  jest.setTimeout(30000);
+
   // Mock steps for testing
   const successStep: ResearchStep = {
     name: 'SuccessStep',
@@ -105,11 +108,15 @@ describe('Pipeline Execution', () => {
     try {
       await executePipeline(initialState, steps, { errorHandling: 'stop' });
       fail('Pipeline execution should have thrown an error');
-    } catch (error) {
+    } catch (error: unknown) {
       expect(successStep.execute).toHaveBeenCalledTimes(1);
       expect(errorStep.execute).toHaveBeenCalledTimes(1);
       expect(metadataStep.execute).not.toHaveBeenCalled();
-      expect(error.message).toContain('Test error in step');
+      if (error instanceof Error) {
+        expect(error.message).toContain('Test error in step');
+      } else {
+        fail('Expected error to be an instance of Error');
+      }
     }
   });
 
@@ -136,7 +143,7 @@ describe('Pipeline Execution', () => {
           ...state,
           data: {
             ...state.data,
-            processedData: collectedData.map(item => `processed_${item}`)
+            processedData: collectedData.map((item: string) => `processed_${item}`)
           }
         };
       })

@@ -211,39 +211,71 @@ async function executeTrackStep(
         step: err instanceof Error && 'step' in err ? (err as any).step : currentState.metadata.currentStep || 'unknown',
         code: err instanceof Error && 'code' in err ? (err as any).code : 'TRACK_STEP_ERROR'
       })),
-      completed: true
+      completed: currentState.errors.length === 0 // Changed this line - If there are errors, the track is not completed
     };
     
     stepLogger.info(`Track "${name}" completed${trackResult.errors.length > 0 ? ` with ${trackResult.errors.length} errors` : ' successfully'}`);
     
     // If this track should be included in results, add it to the state results
     if (includeInResults) {
-      return {
-        ...state,
-        data: {
-          ...state.data,
-          tracks: {
-            ...(state.data.tracks || {}),
-            [name]: trackResult
-          }
-        },
-        results: [
-          ...state.results,
-          { track: trackResult }
-        ]
-      };
+      // Create combined state - if not isolate, merge track data with parent state
+      if (!isolate) {
+        return {
+          ...state,
+          data: {
+            ...currentState.data, // Use currentState.data instead of state.data to preserve track changes
+            tracks: {
+              ...(state.data.tracks || {}),
+              [name]: trackResult
+            }
+          },
+          results: [
+            ...state.results,
+            { track: trackResult }
+          ]
+        };
+      } else {
+        // If isolated, don't merge data but just add track to tracks
+        return {
+          ...state,
+          data: {
+            ...state.data,
+            tracks: {
+              ...(state.data.tracks || {}),
+              [name]: trackResult
+            }
+          },
+          results: [
+            ...state.results,
+            { track: trackResult }
+          ]
+        };
+      }
     } else {
-      // Just add the track data to the state's data object
-      return {
-        ...state,
-        data: {
-          ...state.data,
-          tracks: {
-            ...(state.data.tracks || {}),
-            [name]: trackResult
+      // Same data handling logic as above, but don't add to results
+      if (!isolate) {
+        return {
+          ...state,
+          data: {
+            ...currentState.data, // Use currentState.data to preserve track changes
+            tracks: {
+              ...(state.data.tracks || {}),
+              [name]: trackResult
+            }
           }
-        }
-      };
+        };
+      } else {
+        return {
+          ...state,
+          data: {
+            ...state.data,
+            tracks: {
+              ...(state.data.tracks || {}),
+              [name]: trackResult
+            }
+          }
+        };
+      }
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);

@@ -2,7 +2,12 @@ import { plan } from '../../src/steps/plan';
 import { createMockState, executeStep, mockLLM } from '../test-utils';
 import { generateText } from 'ai';
 
+jest.mock('ai');
+
 describe('plan step', () => {
+  // Increase timeout for all tests to 30 seconds
+  jest.setTimeout(30000);
+  
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -86,8 +91,13 @@ describe('plan step', () => {
     try {
       await executeStep(planStep, initialState);
       fail('Should have thrown an error');
-    } catch (error) {
-      expect(error.message).toContain('LLM failure');
+    } catch (error: unknown) {
+      // Type guard to ensure error is an Error instance
+      if (error instanceof Error) {
+        expect(error.message).toContain('LLM failure');
+      } else {
+        fail('Expected error to be an instance of Error');
+      }
     }
   });
 

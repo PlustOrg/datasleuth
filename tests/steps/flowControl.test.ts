@@ -27,7 +27,7 @@ describe('flowControl steps', () => {
 
       // The evaluation should be true and stored in the state
       expect(updatedState.data.evaluations).toBeDefined();
-      expect(updatedState.data.evaluations?.EnoughSearchResults).toBe(true);
+      expect(updatedState.data.evaluations?.EnoughSearchResults.passed).toBe(true);
     });
 
     it('should evaluate to false when criteria are not met', async () => {
@@ -48,7 +48,7 @@ describe('flowControl steps', () => {
       const updatedState = await executeStep(evaluateStep, initialState);
 
       // The evaluation should be false
-      expect(updatedState.data.evaluations?.EnoughSearchResults).toBe(false);
+      expect(updatedState.data.evaluations?.EnoughSearchResults.passed).toBe(false);
     });
 
     it('should include confidence score when provided', async () => {
@@ -121,7 +121,7 @@ describe('flowControl steps', () => {
       // The steps should have been executed until the counter reached 3
       expect(incrementStep.execute).toHaveBeenCalledTimes(3);
       expect(updatedState.data.counter).toBe(3);
-      expect(updatedState.data.evaluations?.CounterReachedThree).toBe(true);
+      expect(updatedState.data.evaluations?.CounterReachedThree.passed).toBe(true);
     });
 
     it('should respect maxIterations parameter', async () => {
@@ -164,7 +164,7 @@ describe('flowControl steps', () => {
       expect(incrementStep.execute).toHaveBeenCalledTimes(2);
       expect(updatedState.data.counter).toBe(2);
       // Evaluation should still be false
-      expect(updatedState.data.evaluations?.AlwaysFalse).toBe(false);
+      expect(updatedState.data.evaluations?.AlwaysFalse.passed).toBe(false);
     });
 
     it('should throw an error when maxIterations is reached if configured', async () => {

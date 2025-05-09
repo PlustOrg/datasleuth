@@ -15,8 +15,10 @@
     "dev": "tsc --watch",
     "lint": "eslint 'src/**/*.ts'",
     "format": "prettier --write 'src/**/*.ts'",
-    "test": "jest",
+    "test": "jest -f --json --outputFile=test-output.json",
+    "test:console": "jest",
     "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage --json --outputFile=coverage-output.json",
     "example:basic": "ts-node examples/basic-research.ts",
     "example:advanced": "ts-node examples/advanced-research.ts",
     "example:orchestration": "ts-node examples/orchestration-research.ts",
@@ -48,6 +50,7 @@
     "axios": "^1.9.0",
     "cheerio": "^1.0.0",
     "mastra": "^0.6.1",
+    "ollama-ai-provider": "^1.2.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
