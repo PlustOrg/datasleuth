@@ -5,7 +5,7 @@
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
-import { generateText, LanguageModel } from 'ai';
+import { generateText, generateObject, LanguageModel } from 'ai';
 import { 
   ValidationError, 
   LLMError, 
@@ -225,74 +225,17 @@ async function generateResearchPlanWithLLM(
       try {
         logger.debug(`Generating research plan for query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`);
         
-        // Generate the research plan using the AI SDK
-        const { text } = await generateText({
+        // Generate the research plan using the AI SDK with generateObject
+        const { object } = await generateObject({
           model: llm,
+          schema: researchPlanSchema,
           system: systemPrompt,
-          prompt: `Create a detailed research plan for the query: "${query}"
-          
-          Output the research plan in JSON format matching this structure:
-          {
-            "objectives": ["objective 1", "objective 2", ...],
-            "searchQueries": ["query 1", "query 2", ...],
-            "relevantFactors": ["factor 1", "factor 2", ...],
-            "dataGatheringStrategy": "Detailed strategy description",
-            "expectedOutcomes": ["outcome 1", "outcome 2", ...]
-          }
-          
-          Make sure to format the output as valid JSON.`,
+          prompt: `Create a detailed research plan for the query: "${query}"`,
           temperature,
         });
 
-        // Parse the JSON response
-        try {
-          logger.debug('Received response from LLM, parsing JSON');
-          const parsedPlan = JSON.parse(text);
-          
-          // Validate against schema
-          try {
-            const validatedPlan = researchPlanSchema.parse(parsedPlan);
-            logger.debug(`Successfully validated research plan with ${validatedPlan.searchQueries.length} search queries`);
-            return validatedPlan;
-          } catch (validationError) {
-            logger.error(`LLM response failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`);
-            logger.debug(`Invalid plan structure: ${JSON.stringify(parsedPlan)}`);
-            
-            throw new ValidationError({
-              message: `Research plan failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`,
-              step: 'ResearchPlanning',
-              details: { 
-                parsedResponse: parsedPlan,
-                validationError,
-                schema: researchPlanSchema.toString()
-              },
-              retry: true,
-              suggestions: [
-                "Check if the LLM is following the requested JSON structure",
-                "Verify that required fields are being generated",
-                "Consider simplifying the schema requirements"
-              ]
-            });
-          }
-        } catch (parseError) {
-          logger.error(`Failed to parse LLM response as valid JSON`);
-          logger.debug(`Raw LLM response: ${text}`);
-          
-          throw new LLMError({
-            message: 'LLM response was not valid JSON for research plan',
-            step: 'ResearchPlanning',
-            details: { 
-              rawResponse: text, 
-              parseError 
-            },
-            retry: true,
-            suggestions: [
-              "Verify the prompt is properly instructing the model to return valid JSON",
-              "Try a different model that produces more reliable structured output",
-              "Consider adjusting the temperature value to get more consistent output"
-            ]
-          });
-        }
+        logger.debug(`Successfully generated research plan with ${object.searchQueries.length} search queries`);
+        return object;
       } catch (error: unknown) {
         // If it's already one of our error types, just rethrow it
         if (error instanceof ValidationError || error instanceof LLMError) {

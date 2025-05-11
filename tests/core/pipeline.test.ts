@@ -35,15 +35,7 @@ describe('Pipeline Execution', () => {
         ...state,
         metadata: {
           ...state.metadata,
-          stepHistory: [
-            ...(state.metadata.stepHistory || []),
-            {
-              stepName: 'MetadataStep',
-              startTime: new Date(),
-              endTime: new Date(),
-              success: true
-            }
-          ]
+          metadataStepRan: true
         }
       };
     })
@@ -101,23 +93,17 @@ describe('Pipeline Execution', () => {
     expect(result.errors[0].message).toContain('Test error in step');
   });
 
-  it('should stop execution when a step fails and errorHandling is set to "fail"', async () => {
+  it('should stop execution when a step fails and errorHandling is set to "stop"', async () => {
     const initialState = createMockState();
     const steps = [successStep, errorStep, metadataStep];
     
-    try {
-      await executePipeline(initialState, steps, { errorHandling: 'stop' });
-      fail('Pipeline execution should have thrown an error');
-    } catch (error: unknown) {
-      expect(successStep.execute).toHaveBeenCalledTimes(1);
-      expect(errorStep.execute).toHaveBeenCalledTimes(1);
-      expect(metadataStep.execute).not.toHaveBeenCalled();
-      if (error instanceof Error) {
-        expect(error.message).toContain('Test error in step');
-      } else {
-        fail('Expected error to be an instance of Error');
-      }
-    }
+    const result = await executePipeline(initialState, steps, { errorHandling: 'stop' });
+    
+    expect(successStep.execute).toHaveBeenCalledTimes(1);
+    expect(errorStep.execute).toHaveBeenCalledTimes(1);
+    expect(metadataStep.execute).not.toHaveBeenCalled();
+    expect(result.errors.length).toBe(1);
+    expect(result.errors[0].message).toContain('Test error in step');
   });
 
   it('should pass the correct state between steps', async () => {

@@ -6,7 +6,7 @@ import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
-import { generateText, LanguageModel } from 'ai';
+import { generateText, generateObject, LanguageModel } from 'ai';
 import { 
   ValidationError, 
   LLMError, 
@@ -25,6 +25,11 @@ const refinedQuerySchema = z.object({
   targetedAspects: z.array(z.string()).optional(),
   reasonForRefinement: z.string().optional(),
 });
+
+/**
+ * Schema for an array of refined queries
+ */
+const refinedQueriesArraySchema = z.array(refinedQuerySchema);
 
 export type RefinedQuery = z.infer<typeof refinedQuerySchema>;
 
@@ -382,8 +387,14 @@ async function generateRefinedQueriesWithLLM(
         // Use default or custom prompt
         const systemPrompt = customPrompt || DEFAULT_REFINE_QUERY_PROMPT;
         
-        // Construct the query refinement prompt
-        const refinementPrompt = `
+        logger.debug(`Sending query refinement request to LLM with temperature ${temperature}`);
+        
+        // Generate the refined queries using the AI SDK with generateObject
+        const { object } = await generateObject({
+          model: llm,
+          schema: refinedQueriesArraySchema,
+          system: systemPrompt,
+          prompt: `
 Based on the original query and the research context provided, generate ${maxQueries} refined search queries 
 that will yield more relevant, comprehensive, or accurate information.
 
@@ -397,107 +408,14 @@ For each refined query, provide:
 2. The refinement strategy used
 3. Targeted aspects that the refinement focuses on
 4. The reason for this specific refinement
-
-Format your response as valid JSON with the following structure:
-[
-  {
-    "originalQuery": "${originalQuery}",
-    "refinedQuery": "refined query text here",
-    "refinementStrategy": "strategy name",
-    "targetedAspects": ["aspect1", "aspect2", ...],
-    "reasonForRefinement": "explanation of why this refinement is helpful"
-  },
-  ...
-]
-
-Ensure the JSON is properly formatted with no trailing commas.
-`;
-
-        logger.debug(`Sending query refinement request to LLM with temperature ${temperature}`);
-        
-        // Generate the refined queries using the AI SDK
-        const { text } = await generateText({
-          model: llm,
-          system: systemPrompt,
-          prompt: refinementPrompt,
+`,
           temperature,
         });
 
-        // Parse the JSON response
-        try {
-          logger.debug('Received response from LLM, parsing JSON');
-          const parsedResult = JSON.parse(text);
-          
-          // Validate against schema
-          if (!Array.isArray(parsedResult)) {
-            throw new ValidationError({
-              message: 'LLM response is not an array for refined queries',
-              step: 'RefineQuery',
-              details: { parsedResponse: parsedResult },
-              retry: true,
-              suggestions: [
-                "Ensure the prompt explicitly asks for an array of objects",
-                "Try a different model that produces more reliable structured output"
-              ]
-            });
-          }
-          
-          // Validate each item in the array
-          const validatedQueries: RefinedQuery[] = [];
-          
-          for (const item of parsedResult) {
-            try {
-              const validatedItem = refinedQuerySchema.parse(item);
-              validatedQueries.push(validatedItem);
-            } catch (validationError) {
-              logger.warn(`Skipping invalid refined query: ${JSON.stringify(item)}`);
-              logger.debug(`Validation error: ${validationError instanceof Error ? validationError.message : 'Unknown error'}`);
-            }
-          }
-          
-          if (validatedQueries.length === 0) {
-            throw new ValidationError({
-              message: 'No valid refined queries could be extracted from LLM response',
-              step: 'RefineQuery',
-              details: { 
-                parsedResponse: parsedResult,
-                schema: refinedQuerySchema.toString()
-              },
-              retry: true,
-              suggestions: [
-                "Check if the LLM is following the requested JSON structure",
-                "Try a different model or adjust the temperature",
-                "Simplify the schema requirements"
-              ]
-            });
-          }
-          
-          logger.debug(`Successfully validated ${validatedQueries.length} refined queries`);
-          return validatedQueries;
-          
-        } catch (parseError) {
-          if (parseError instanceof ValidationError) {
-            throw parseError;
-          }
-          
-          logger.error(`Failed to parse LLM response as valid JSON`);
-          logger.debug(`Raw LLM response: ${text}`);
-          
-          throw new LLMError({
-            message: 'LLM response was not valid JSON for refined queries',
-            step: 'RefineQuery',
-            details: { 
-              rawResponse: text, 
-              parseError 
-            },
-            retry: true,
-            suggestions: [
-              "Verify the prompt is properly instructing the model to return valid JSON",
-              "Try a different model that produces more reliable structured output",
-              "Consider using a lower temperature value for more consistent output"
-            ]
-          });
-        }
+        // Since we're using generateObject, we don't need to validate the result
+        // as it's already validated against the schema
+        logger.debug(`Successfully generated ${object.length} refined queries`);
+        return object;
       } catch (error: unknown) {
         // If it's already one of our error types, just rethrow it
         if (error instanceof ValidationError || error instanceof LLMError) {

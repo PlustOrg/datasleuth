@@ -7,7 +7,7 @@ import { createStep } from '../utils/steps';
 import { ResearchState, ExtractedContent, FactCheckResult } from '../types/pipeline';
 import { StepOptions } from '../types/pipeline';
 import { z } from 'zod';
-import { generateText, LanguageModel } from 'ai';
+import { generateText, generateObject, LanguageModel } from 'ai';
 import { 
   ValidationError, 
   ConfigurationError, 
@@ -21,6 +21,18 @@ import { executeWithRetry } from '../utils/retry';
  * Format options for summary output
  */
 export type SummaryFormat = 'paragraph' | 'bullet' | 'structured';
+
+/**
+ * Schema for structured summary output
+ */
+const structuredSummarySchema = z.object({
+  summary: z.string(),
+  keyPoints: z.array(z.string()),
+  sources: z.array(z.string()).optional(),
+  sections: z.record(z.string()).optional()
+});
+
+export type StructuredSummary = z.infer<typeof structuredSummarySchema>;
 
 /**
  * Options for the summarization step
@@ -361,7 +373,7 @@ async function generateSummaryWithLLM(
   llm: LanguageModel,
   temperature: number,
   customPrompt?: string
-): Promise<string | { summary: string, structuredSummary?: any }> {
+): Promise<string | { summary: string, structuredSummary?: StructuredSummary }> {
   const logger = createStepLogger('SummaryGenerator');
   
   try {
@@ -392,7 +404,6 @@ async function generateSummaryWithLLM(
     
     // Build formatting instructions based on the requested format
     let formatInstructions = '';
-    let outputFormat = '';
     
     switch (format) {
       case 'paragraph':
@@ -402,17 +413,7 @@ async function generateSummaryWithLLM(
         formatInstructions = 'structure the summary as bullet points highlighting key insights';
         break;
       case 'structured':
-        formatInstructions = `structure the summary with clear sections and provide the output as valid JSON with the following format:
-{
-  "summary": "Main summary paragraph here",
-  "keyPoints": ["Key point 1", "Key point 2", ...],
-  "sources": ["Source 1", "Source 2", ...],
-  "sections": {
-    "sectionName1": "Content for section 1",
-    "sectionName2": "Content for section 2"
-  }
-}`;
-        outputFormat = 'JSON';
+        formatInstructions = 'structure the summary with clear sections and provide the output as valid JSON';
         break;
     }
     
@@ -447,13 +448,36 @@ ${formatInstructions}
 ${citationInstructions}
 ${extraInstructions}
 
-${outputFormat ? `Provide the output in valid ${outputFormat} format.` : ''}
 Keep your summary under ${maxLength} characters.
 `;
 
     logger.debug(`Generating summary with ${format} format, maxLength: ${maxLength}`);
     
-    // Generate the summary using the AI SDK
+    // For structured format, use generateObject with a schema
+    if (format === 'structured') {
+      try {
+        const { object } = await generateObject({
+          model: llm,
+          schema: structuredSummarySchema,
+          system: systemPrompt,
+          prompt: summaryPrompt,
+          temperature,
+          maxTokens: Math.floor(maxLength / 4), // rough character to token conversion
+        });
+        
+        logger.debug(`Generated structured summary with ${object.keyPoints.length} key points`);
+        
+        return {
+          summary: object.summary,
+          structuredSummary: object
+        };
+      } catch (error) {
+        // If generateObject fails, we'll fall back to generateText
+        logger.warn(`Failed to generate structured summary with generateObject: ${error instanceof Error ? error.message : String(error)}. Falling back to generateText.`);
+      }
+    }
+    
+    // For non-structured formats or if generateObject failed, use generateText
     const { text } = await generateText({
       model: llm,
       system: systemPrompt,
@@ -464,7 +488,7 @@ Keep your summary under ${maxLength} characters.
 
     logger.debug(`Summary generated with ${text.length} characters`);
     
-    // If format is structured, try to parse as JSON
+    // If format is structured but we had to use generateText, try to parse as JSON
     if (format === 'structured') {
       try {
         // Try to extract JSON if it's enclosed in ```json and ``` blocks
@@ -472,21 +496,15 @@ Keep your summary under ${maxLength} characters.
                           text.match(/{[\s\S]*}/);
         
         const jsonString = jsonMatch ? jsonMatch[0].replace(/```(?:json)?\s*|\s*```/g, '') : text;
-        const structuredSummary = JSON.parse(jsonString);
         
-        // Validate that it has at least a summary field
-        if (structuredSummary && typeof structuredSummary.summary === 'string') {
-          return {
-            summary: structuredSummary.summary,
-            structuredSummary
-          };
-        } else {
-          // If no summary field, use the whole text as summary but still return structured data
-          return {
-            summary: text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text,
-            structuredSummary
-          };
-        }
+        // Parse the JSON and validate against our schema
+        const parsedJson = JSON.parse(jsonString);
+        const validatedData = structuredSummarySchema.parse(parsedJson);
+        
+        return {
+          summary: validatedData.summary,
+          structuredSummary: validatedData
+        };
       } catch (parseError) {
         logger.warn(`Failed to parse structured summary as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
         // Fall back to treating it as plain text

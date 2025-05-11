@@ -6,7 +6,7 @@ import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
 import { ResearchState } from '../types/pipeline';
 import { z } from 'zod';
-import { generateText, LanguageModel } from 'ai';
+import { generateText, generateObject, LanguageModel } from 'ai';
 import { 
   ValidationError, 
   LLMError, 
@@ -362,8 +362,12 @@ async function generateAnalysisWithLLM(
           .replace('{focus}', focus)
           .replace('{depth}', depth);
         
-        // Construct the prompt for analysis
-        const analysisPrompt = `
+        // Generate the analysis using the AI SDK with generateObject
+        const { object } = await generateObject({
+          model: llm,
+          schema: analysisResultSchema,
+          system: systemPrompt,
+          prompt: `
 Query: "${query}"
 
 CONTENT TO ANALYZE:
@@ -371,80 +375,12 @@ ${contentText}
 
 Focus specifically on aspects related to "${focus}" and provide a ${depth} analysis.
 ${includeEvidence ? 'Include supporting evidence from the provided content.' : ''}
-${includeRecommendations ? 'Provide actionable recommendations based on your analysis.' : ''}
-
-Format your response as valid JSON with the following structure:
-{
-  "focus": "${focus}",
-  "insights": ["insight 1", "insight 2", ...],
-  "confidence": 0.85, // a number between 0 and 1 representing your confidence in this analysis
-  ${includeEvidence ? '"supportingEvidence": ["evidence 1", "evidence 2", ...],' : ''}
-  "limitations": ["limitation 1", "limitation 2", ...],
-  ${includeRecommendations ? '"recommendations": ["recommendation 1", "recommendation 2", ...]' : ''}
-}
-
-Ensure the JSON is properly formatted with no trailing commas.
-`;
-
-        logger.debug(`Sending analysis request to LLM with temperature ${temperature}`);
-        
-        // Generate the analysis using the AI SDK
-        const { text } = await generateText({
-          model: llm,
-          system: systemPrompt,
-          prompt: analysisPrompt,
+${includeRecommendations ? 'Provide actionable recommendations based on your analysis.' : ''}`,
           temperature,
         });
 
-        // Parse the JSON response
-        try {
-          logger.debug(`Received response from LLM, parsing JSON`);
-          const parsedAnalysis = JSON.parse(text);
-          
-          // Validate against schema
-          try {
-            const validatedAnalysis = analysisResultSchema.parse(parsedAnalysis);
-            logger.debug(`Successfully validated analysis with ${validatedAnalysis.insights.length} insights`);
-            return validatedAnalysis;
-          } catch (validationError) {
-            logger.error(`LLM response failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`);
-            logger.debug(`Invalid analysis structure: ${JSON.stringify(parsedAnalysis)}`);
-            
-            throw new ValidationError({
-              message: `Analysis result failed schema validation: ${validationError instanceof Error ? validationError.message : 'Unknown validation error'}`,
-              step: 'Analyze',
-              details: { 
-                parsedResponse: parsedAnalysis,
-                validationError,
-                schema: analysisResultSchema.toString()
-              },
-              retry: true,
-              suggestions: [
-                "Check if the LLM is following the requested JSON structure",
-                "Verify that required fields are being generated",
-                "Consider simplifying the schema requirements"
-              ]
-            });
-          }
-        } catch (parseError) {
-          logger.error(`Failed to parse LLM response as valid JSON`);
-          logger.debug(`Raw LLM response: ${text}`);
-          
-          throw new LLMError({
-            message: 'LLM response was not valid JSON for analysis result',
-            step: 'Analyze',
-            details: { 
-              rawResponse: text, 
-              parseError 
-            },
-            retry: true,
-            suggestions: [
-              "Verify the prompt is properly instructing the model to return valid JSON",
-              "Try a different model that produces more reliable structured output",
-              "Consider using a more structured approach with explicit field extraction"
-            ]
-          });
-        }
+        logger.debug(`Successfully generated analysis with ${object.insights.length} insights`);
+        return object;
       } catch (error: unknown) {
         // If it's already one of our error types, just rethrow it
         if (error instanceof ValidationError || error instanceof LLMError) {

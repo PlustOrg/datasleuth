@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import type { ResearchState, ResearchStep } from '../src/types/pipeline';
 import type { LanguageModel } from 'ai';
-import { generateText } from 'ai';
+import { generateText, generateObject } from 'ai';
+
+// No longer using ollama directly to avoid external dependencies
+// import { ollama } from 'ollama-ai-provider';
+// export const ollamaLLM = ollama("phi4-mini");
 
 /**
  * Creates a mock research state for testing
@@ -40,6 +44,41 @@ export function createBasicSchema() {
   });
 }
 
+// Default research plan object for consistent testing
+const DEFAULT_RESEARCH_PLAN = {
+  objectives: ["Objective 1", "Objective 2"],
+  searchQueries: ["Query 1", "Query 2"],
+  expectedFindings: ["Expected finding 1", "Expected finding 2"],
+  relevantFactors: ["Factor 1", "Factor 2"],
+  dataGatheringStrategy: "Test gathering strategy",
+  focusAreas: ["Area 1", "Area 2"],
+  expectedOutcomes: ["Expected outcome 1", "Expected outcome 2"]
+};
+
+// Default fact check object for consistent testing
+const DEFAULT_FACT_CHECK = {
+  statement: "Test statement 1",
+  isValid: true,
+  confidence: 0.9,
+  evidence: ["Evidence for statement 1"]
+};
+
+// Default analysis object for consistent testing
+const DEFAULT_ANALYSIS = {
+  focus: "general",
+  insights: ["Key insight 1", "Key insight 2"],
+  confidence: 0.9,
+  supportingEvidence: ["Evidence 1", "Evidence 2"],
+  recommendations: ["Recommendation 1", "Recommendation 2"]
+};
+
+// Default structured summary for consistent testing
+const DEFAULT_STRUCTURED_SUMMARY = {
+  summary: "This is a structured summary for testing",
+  keyPoints: ["Key point 1", "Key point 2"],
+  sources: ["https://example.com/1", "https://example.com/2"]
+};
+
 /**
  * Mock LLM for testing that doesn't use actual Ollama
  */
@@ -64,6 +103,29 @@ export const mockLLM: LanguageModel = {
 };
 
 /**
+ * Mock LLM for plan generation tests
+ */
+export const mockPlanLLM: LanguageModel = {
+  specificationVersion: 'v1',
+  provider: 'test-provider',
+  modelId: 'test-plan-model',
+  defaultObjectGenerationMode: 'json',
+  supportsStructuredOutputs: true,
+  
+  doGenerate: async () => ({
+    text: JSON.stringify(DEFAULT_RESEARCH_PLAN),
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 20 },
+    rawCall: { rawPrompt: null, rawSettings: {} }
+  }),
+  
+  doStream: async () => ({
+    stream: new ReadableStream(),
+    rawCall: { rawPrompt: null, rawSettings: {} }
+  })
+};
+
+/**
  * Mock LLM for fact check tests
  */
 export const mockFactCheckLLM: LanguageModel = {
@@ -74,12 +136,7 @@ export const mockFactCheckLLM: LanguageModel = {
   supportsStructuredOutputs: true,
   
   doGenerate: async () => ({
-    text: JSON.stringify({
-      statement: "Test statement 1",
-      isValid: true,
-      confidence: 0.9,
-      evidence: ["Evidence for statement 1"]
-    }),
+    text: JSON.stringify(DEFAULT_FACT_CHECK),
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
     rawCall: { rawPrompt: null, rawSettings: {} }
@@ -102,12 +159,7 @@ export const mockAnalyzeLLM: LanguageModel = {
   supportsStructuredOutputs: true,
   
   doGenerate: async () => ({
-    text: JSON.stringify({
-      summary: "This is a test analysis summary",
-      keyInsights: ["Key insight 1", "Key insight 2"],
-      topics: ["Topic 1", "Topic 2"],
-      recommendations: ["Recommendation 1", "Recommendation 2"]
-    }),
+    text: JSON.stringify(DEFAULT_ANALYSIS),
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
     rawCall: { rawPrompt: null, rawSettings: {} }
@@ -153,11 +205,7 @@ export const mockStructuredSummarizeLLM: LanguageModel = {
   supportsStructuredOutputs: true,
   
   doGenerate: async () => ({
-    text: JSON.stringify({
-      summary: "This is a structured summary for testing",
-      keyPoints: ["Key point 1", "Key point 2"],
-      sources: ["https://example.com/1", "https://example.com/2"]
-    }),
+    text: JSON.stringify(DEFAULT_STRUCTURED_SUMMARY),
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
     rawCall: { rawPrompt: null, rawSettings: {} }
@@ -188,45 +236,89 @@ export const mockErrorLLM: LanguageModel = {
   }
 };
 
-// Mock the generateText function from the ai package
+// Mock the generateText and generateObject functions from the ai package
 jest.mock('ai', () => {
   const originalModule = jest.requireActual('ai');
   
+  // Define standard mock responses for consistent testing
+  const DEFAULT_RESEARCH_PLAN = {
+    objectives: ["Objective 1", "Objective 2"],
+    searchQueries: ["Query 1", "Query 2"],
+    relevantFactors: ["Factor 1", "Factor 2"],
+    dataGatheringStrategy: "Test gathering strategy",
+    expectedOutcomes: ["Expected outcome 1", "Expected outcome 2"]
+  };
+  
+  const DEFAULT_FACT_CHECK = {
+    statement: "Test statement 1",
+    isValid: true,
+    confidence: 0.9,
+    evidence: ["Evidence for statement 1"]
+  };
+  
+  const DEFAULT_ANALYSIS = {
+    focus: "general",
+    insights: ["Key insight 1", "Key insight 2"],
+    confidence: 0.9,
+    supportingEvidence: ["Evidence 1", "Evidence 2"],
+    recommendations: ["Recommendation 1", "Recommendation 2"]
+  };
+  
+  const DEFAULT_STRUCTURED_SUMMARY = {
+    summary: "This is a structured summary for testing",
+    keyPoints: ["Key point 1", "Key point 2"],
+    sources: ["https://example.com/1", "https://example.com/2"]
+  };
+  
   return {
     ...originalModule,
-    generateText: jest.fn().mockImplementation(async (options: any) => {
-      // Check which mock LLM model is being used
-      if (options.model === mockFactCheckLLM) {
-        return {
-          text: JSON.stringify({
-            statement: "Test statement 1",
-            isValid: true,
-            confidence: 0.9,
-            evidence: ["Evidence for statement 1"]
-          }),
-          usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
-        };
-      }
-      
-      if (options.model === mockErrorLLM) {
+    generateText: jest.fn().mockImplementation(async ({ model, prompt, system }) => {
+      // Handle the error case first
+      if (model === mockErrorLLM) {
         throw new Error('LLM failure');
       }
       
-      if (options.model === mockAnalyzeLLM) {
+      // For plan testing
+      if (model === mockPlanLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('research plan'))) {
         return {
-          text: JSON.stringify({
-            summary: "This is a test analysis summary",
-            keyInsights: ["Key insight 1", "Key insight 2"],
-            topics: ["Topic 1", "Topic 2"],
-            recommendations: ["Recommendation 1", "Recommendation 2"]
-          }),
+          text: JSON.stringify(DEFAULT_RESEARCH_PLAN),
           usage: { promptTokens: 10, completionTokens: 20 },
           finishReason: 'stop'
         };
       }
       
-      if (options.model === mockSummarizeLLM) {
+      // For fact check testing
+      if (model === mockFactCheckLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('fact check'))) {
+        return {
+          text: JSON.stringify(DEFAULT_FACT_CHECK),
+          usage: { promptTokens: 10, completionTokens: 20 },
+          finishReason: 'stop'
+        };
+      }
+      
+      // For analysis testing
+      if (model === mockAnalyzeLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('analyze'))) {
+        return {
+          text: JSON.stringify(DEFAULT_ANALYSIS),
+          usage: { promptTokens: 10, completionTokens: 20 },
+          finishReason: 'stop'
+        };
+      }
+      
+      // For summarize testing
+      if (model === mockSummarizeLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('summarize'))) {
+        if (prompt && typeof prompt === 'string' && prompt.includes('structured')) {
+          return {
+            text: JSON.stringify(DEFAULT_STRUCTURED_SUMMARY),
+            usage: { promptTokens: 10, completionTokens: 20 },
+            finishReason: 'stop'
+          };
+        }
+        
         return {
           text: 'This is a test summary.',
           usage: { promptTokens: 10, completionTokens: 20 },
@@ -234,109 +326,80 @@ jest.mock('ai', () => {
         };
       }
       
-      if (options.model === mockStructuredSummarizeLLM) {
-        return {
-          text: JSON.stringify({
-            summary: "This is a structured summary for testing",
-            keyPoints: ["Key point 1", "Key point 2"],
-            sources: ["https://example.com/1", "https://example.com/2"]
-          }),
-          usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
-        };
-      }
-      
-      // For error simulation
-      if (options.prompt && 
-          typeof options.prompt === 'string' && 
-          options.prompt.includes('LLM failure')) {
-        throw new Error('LLM failure');
-      }
-      
-      if (options.prompt && 
-          typeof options.prompt === 'string' && 
-          options.prompt.includes('Summarization failed')) {
-        throw new Error('Summarization failed');
-      }
-      
-      // For content-based response selection when specific models aren't used
-      if (options.prompt && 
-          typeof options.prompt === 'string' && 
-          (options.prompt.includes('fact check') || options.prompt.includes('verify'))) {
-        return {
-          text: JSON.stringify({
-            statement: "Test statement 1",
-            isValid: true,
-            confidence: 0.9,
-            evidence: ["Evidence for statement 1"]
-          }),
-          usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
-        };
-      }
-      
-      if (options.prompt && 
-          typeof options.prompt === 'string' && 
-          (options.prompt.includes('analysis') || options.prompt.includes('analyze'))) {
-        return {
-          text: JSON.stringify({
-            summary: "This is a test analysis summary",
-            keyInsights: ["Key insight 1", "Key insight 2"],
-            topics: ["Topic 1", "Topic 2"],
-            recommendations: ["Recommendation 1", "Recommendation 2"]
-          }),
-          usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
-        };
-      }
-      
-      if (options.prompt && 
-          typeof options.prompt === 'string' && 
-          (options.prompt.includes('research plan') || options.prompt.includes('plan research'))) {
-        return {
-          text: JSON.stringify({
-            objectives: ["Research objective 1", "Research objective 2"],
-            searchQueries: ["query 1", "query 2"],
-            relevantFactors: ["factor 1", "factor 2"],
-            dataGatheringStrategy: "Test data gathering strategy",
-            focusAreas: ["area 1", "area 2"],
-            expectedOutcomes: ["outcome 1", "outcome 2"]
-          }),
-          usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
-        };
-      }
-      
-      if (options.prompt && 
-          typeof options.prompt === 'string' && 
-          options.prompt.includes('structured') && 
-          (options.prompt.includes('summarize') || options.prompt.includes('summary'))) {
-        return {
-          text: JSON.stringify({
-            summary: "This is a structured summary for testing",
-            keyPoints: ["Key point 1", "Key point 2"],
-            sources: ["https://example.com/1", "https://example.com/2"]
-          }),
-          usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
-        };
-      }
-      
-      if (options.prompt && 
-          typeof options.prompt === 'string' && 
-          (options.prompt.includes('summarize') || options.prompt.includes('summary'))) {
-        return {
-          text: 'This is a generated summary of the research content.',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
-        };
-      }
-      
-      // Default response for other tests
+      // Default response
       return {
         text: 'Mock LLM response',
         usage: { promptTokens: 10, completionTokens: 20 },
         finishReason: 'stop'
+      };
+    }),
+    
+    generateObject: jest.fn().mockImplementation(async ({ model, schema, prompt, system }) => {
+      // Explicit error case
+      if (model === mockErrorLLM) {
+        throw new Error('LLM failure');
+      }
+      
+      // Research plan case - used by our plan.ts file
+      if (model === mockPlanLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('research plan')) ||
+          (schema && schema.shape && 'objectives' in schema.shape)) {
+        
+        return {
+          object: {
+            objectives: ["Objective 1", "Objective 2"],
+            searchQueries: ["Query 1", "Query 2"],
+            relevantFactors: ["Factor 1", "Factor 2"],
+            dataGatheringStrategy: "Test gathering strategy",
+            expectedOutcomes: ["Expected outcome 1", "Expected outcome 2"]
+          }
+        };
+      }
+      
+      // Fact check case
+      if (model === mockFactCheckLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('fact check')) ||
+          (schema && schema.shape && 'isValid' in schema.shape)) {
+        
+        return {
+          object: DEFAULT_FACT_CHECK
+        };
+      }
+      
+      // Analysis case
+      if (model === mockAnalyzeLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('analyze')) ||
+          (schema && schema.shape && 'insights' in schema.shape)) {
+        
+        return {
+          object: DEFAULT_ANALYSIS 
+        };
+      }
+      
+      // Summarize case
+      if (model === mockSummarizeLLM || 
+          model === mockStructuredSummarizeLLM || 
+          (prompt && typeof prompt === 'string' && prompt.includes('summarize'))) {
+        
+        if (model === mockStructuredSummarizeLLM || 
+            (prompt && typeof prompt === 'string' && prompt.includes('structured'))) {
+          return {
+            object: DEFAULT_STRUCTURED_SUMMARY
+          };
+        }
+        
+        return {
+          object: 'This is a test summary.'
+        };
+      }
+      
+      // Default fallback
+      return {
+        object: {
+          key: "value",
+          nested: { property: "test" },
+          array: [1, 2, 3]
+        }
       };
     })
   };

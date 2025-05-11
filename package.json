@@ -15,7 +15,7 @@
     "dev": "tsc --watch",
     "lint": "eslint 'src/**/*.ts'",
     "format": "prettier --write 'src/**/*.ts'",
-    "test": "jest -f --json --outputFile=test-output.json",
+    "test": "jest --json --outputFile=test-output.json",
     "test:console": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --json --outputFile=coverage-output.json",
@@ -50,7 +50,6 @@
     "axios": "^1.9.0",
     "cheerio": "^1.0.0",
     "mastra": "^0.6.1",
-    "ollama-ai-provider": "^1.2.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
@@ -59,6 +58,7 @@
     "@typescript-eslint/parser": "^7.4.0",
     "eslint": "^9.26.0",
     "jest": "^29.7.0",
+    "ollama-ai-provider": "^1.2.0",
     "prettier": "^3.5.3",
     "rimraf": "^5.0.7",
     "ts-jest": "^29.3.2",

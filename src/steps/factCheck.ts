@@ -7,7 +7,7 @@ import { createStep } from '../utils/steps';
 import { ResearchState, FactCheckResult as StateFactCheckResult, ExtractedContent as StateExtractedContent } from '../types/pipeline';
 import { StepOptions } from '../types/pipeline';
 import { z } from 'zod';
-import { generateText, LanguageModel } from 'ai';
+import { generateText, generateObject, LanguageModel } from 'ai';
 import { 
   ValidationError, 
   LLMError, 
@@ -371,59 +371,20 @@ async function performFactCheckingWithLLM(
       // Use retry for LLM calls which may have transient failures
       const checkResult = await executeWithRetry(
         async () => {
-          const factCheckPrompt = `
+          // Generate the fact check using the AI SDK with generateObject
+          const { object } = await generateObject({
+            model: llm,
+            schema: factCheckResultSchema,
+            system: systemPrompt,
+            prompt: `
 Statement to verify: "${statement}"
 
-Analyze this statement for factual accuracy using a threshold of ${threshold.toFixed(2)}, and provide your assessment in valid JSON format:
-{
-  "statement": "${statement}",
-  "isValid": true/false,
-  "confidence": 0.XX, // number between 0 and 1
-  ${includeEvidence ? `"evidence": ["reason 1", "reason 2", ...],
-  "sources": ["https://example.com/source1", "https://example.com/source2", ...],
-  "corrections": "If statement is not valid, provide a corrected version here"` : ''}
-}
-
-Ensure your response is valid JSON and properly formatted with no trailing commas.
-`;
-
-          // Generate the fact check using the AI SDK
-          const { text } = await generateText({
-            model: llm,
-            system: systemPrompt,
-            prompt: factCheckPrompt,
+Analyze this statement for factual accuracy using a threshold of ${threshold.toFixed(2)}.
+`,
             temperature,
           });
 
-          // Parse the JSON response
-          try {
-            const parsedResult = JSON.parse(text);
-            
-            // Validate the result with our schema
-            const validatedResult = factCheckResultSchema.parse(parsedResult);
-            return validatedResult;
-            
-          } catch (parseError) {
-            logger.error('Failed to parse LLM response as valid JSON for fact checking');
-            logger.debug(`Raw LLM response: ${text}`);
-            
-            // For parse errors we throw a specialized error
-            throw new LLMError({
-              message: 'Failed to parse LLM response as valid JSON',
-              step: 'FactCheck',
-              details: { 
-                rawResponse: text, 
-                parseError, 
-                statement 
-              },
-              retry: false,
-              suggestions: [
-                "Verify the prompt is properly constructed",
-                "Check if the model consistently produces valid JSON",
-                "Consider using a more structured approach or format"
-              ]
-            });
-          }
+          return object;
         },
         {
           maxRetries: retry?.maxRetries || 2,
