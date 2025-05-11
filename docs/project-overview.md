@@ -42,6 +42,17 @@ The project uses a **pipeline-based architecture** where research is conducted t
 - `steps.ts`: Utilities for creating standardized pipeline steps
 - `pipeline.ts` (types): Core interfaces for the research pipeline
 - `merge.ts`: Utilities for merging results from parallel research tracks
+- `retry.ts`: Utilities for retrying operations with configurable backoff
+- `logging.ts`: Structured logging with configurable verbosity levels
+- `errors.ts`: Error classes and handling utilities
+
+### Testing
+
+- `test-utils.ts`: Helper functions for testing research steps and pipelines
+- `mocks/*.ts`: Mock implementations of key steps for testing (plan, analyze, factCheck, summarize)
+- Unit tests for each research step
+- Integration tests for the full research pipeline
+- Error simulation and recovery testing
 
 ## Key Coding Patterns
 
@@ -94,16 +105,32 @@ The project employs several consistent coding patterns:
    });
    ```
 
-6. **Simulation First Development**: Core functionality is first implemented with simulations for easier testing and development, before integrating with real services:
+6. **Robust Error Handling**: Standardized error classes with helpful error messages and recovery suggestions:
    ```typescript
-   // Simulate LLM call (will be replaced with real implementation)
-   async function simulateAnalysis(content, query) {
-     await new Promise(resolve => setTimeout(resolve, 800));
-     return { /* simulated result */ };
-   }
+   throw new ValidationError({
+     message: "Invalid schema provided for research output",
+     details: { zodErrors: result.error.errors },
+     suggestions: [
+       "Check that your schema matches the structure expected by the research steps",
+       "Use z.optional() for fields that might not always be present",
+       "Consider using z.any() for fields with uncertain types"
+     ]
+   });
    ```
 
-7. **Parallel Processing Pattern**: The library supports concurrent execution of research steps through the track and parallel mechanisms:
+7. **Retry Pattern**: Operations with external dependencies use configurable retry mechanisms:
+   ```typescript
+   const result = await executeWithRetry(
+     () => searchProvider.search(query),
+     {
+       maxRetries: 3,
+       initialDelay: 1000,
+       backoffFactor: 2
+     }
+   );
+   ```
+
+8. **Parallel Processing Pattern**: The library supports concurrent execution of research steps through the track and parallel mechanisms:
    ```typescript
    const results = await research({
      query: "Quantum computing applications",
@@ -119,13 +146,34 @@ The project employs several consistent coding patterns:
    });
    ```
 
-8. **Conflict Resolution Pattern**: When multiple research tracks produce potentially conflicting information, strategies for resolution are applied:
+9. **Conflict Resolution Pattern**: When multiple research tracks produce potentially conflicting information, strategies for resolution are applied:
    ```typescript
    ResultMerger.createMergeFunction({
      strategy: 'mostConfident', // or 'first', 'last', 'majority', 'weighted', 'custom'
      weights: { technical: 1.5, business: 1.0 } // For weighted strategy
    })
    ```
+
+10. **Test-Driven Development**: Comprehensive test coverage with mocking of external dependencies:
+    ```typescript
+    test('should validate output against the provided schema', async () => {
+      const outputSchema = z.object({
+        requiredField: z.string(),
+        summary: z.string(),
+        keyFindings: z.array(z.string())
+      });
+
+      const result = await research({
+        query: 'Test query', 
+        outputSchema,
+        steps: [] // Empty steps for testing mock behavior
+      });
+
+      expect(result).toHaveProperty('requiredField');
+      expect(result).toHaveProperty('summary');
+      expect(result).toHaveProperty('keyFindings');
+    });
+    ```
 
 ## Usage Pattern
 
@@ -228,15 +276,16 @@ const results = await research({
 
 ## Current Status
 
-- Basic research pipeline is implemented
-- Core steps (plan, search, extract, analyze, etc.) are functional
-- Advanced features including parallel research and entity classification are implemented
-- Result merging with conflict resolution strategies is available
-- Examples demonstrate different usage patterns and scenarios
-- Type system has been improved with proper interfaces and minimal use of any/unknown types
-- Most implementations currently use simulations rather than real LLM calls
-- Integrated with real LLM providers via Vercel AI SDK
-- Enhanced error handling and resilience
+- ✅ Basic research pipeline is implemented
+- ✅ Core steps (plan, search, extract, analyze, etc.) are functional
+- ✅ Advanced features including parallel research and entity classification are implemented
+- ✅ Result merging with conflict resolution strategies is available
+- ✅ Examples demonstrate different usage patterns and scenarios
+- ✅ Type system has been improved with proper interfaces and minimal use of any/unknown types
+- ✅ Integration with real LLM providers via Vercel AI SDK
+- ✅ Enhanced error handling and resilience
+- ✅ Comprehensive test suite with mocks and fixtures
+- 🔄 Documentation and JSDoc comments (in progress)
 
 ## Dependencies
 
@@ -247,6 +296,7 @@ const results = await research({
 
 ## Next Development Areas
 
-- Adding comprehensive unit and integration tests
-- Implementing specialized domain-specific analysis modules
-- Creating better debugging and logging utilities
+- Adding comprehensive documentation and JSDoc comments
+- Creating detailed usage guides and examples
+- Package preparation for npm publication
+- Performance optimization in high-volume research scenarios

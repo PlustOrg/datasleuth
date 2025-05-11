@@ -27,12 +27,13 @@ Build a deep research tool as an npm package. Users provide a search query and o
 - Integration with real LLM services through Vercel AI SDK
 - Error handling improvements
 - Enhanced error handling and logging
+- Comprehensive test suite (unit & integration tests)
 
 ### 🔄 In Progress
-- Testing
+- Documentation
 
 ### ⏭️ Next Steps
-- Documentation
+- Package preparation for npm distribution
 
 ## How It Works
 Uses modular pipeline with configurable steps to plan research, search web, extract content, evaluate results, refine queries, analyze data, run parallel tracks, and merge findings. Users interact through a simple `research()` API.
@@ -63,13 +64,14 @@ Based on the current project status, here's the implementation plan:
 - Provide detailed error messages and suggestions for recovery
 - Add proper logging at different verbosity levels
 
-### 🔄 4. Testing Framework (In Progress)
-- Create unit tests for individual steps
-- Develop integration tests for the full pipeline
-- Implement mock providers for testing
-- Create test fixtures for common research scenarios
+### ✅ 4. Testing Framework (Completed)
+- Created unit tests for individual steps
+- Developed integration tests for the full pipeline
+- Implemented mock providers for testing (plan, search, fact-check, summarize)
+- Created test fixtures for common research scenarios
+- Added error simulation and recovery testing
 
-### 5. Documentation
+### 🔄 5. Documentation (In Progress)
 - Enhance JSDoc comments throughout the codebase
 - Create usage examples with real-world scenarios
 - Add troubleshooting guides and best practices
@@ -198,6 +200,7 @@ const parallelResearch = await research({
 4. **Resilience**: Graceful error handling
 5. **Configurability**: Fine-tunable research
 6. **Type Safety**: Proper typing and validation
+7. **Testability**: Comprehensive test coverage with mocking
 
 ## TypeScript Best Practices
 1. Import `mastra` correctly: `import * as mastra from 'mastra'`
@@ -213,6 +216,7 @@ const parallelResearch = await research({
 11. Check optional properties before access
 12. Use type guards for dynamic data
 13. Errors in `catch` blocks are auto-typed as `unknown`. Use type guards to get the actual type.
+14. Test error conditions with proper mocking and type assertions
 
 ## Vercel AI SDK Docs
 
