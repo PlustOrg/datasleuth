@@ -6,136 +6,211 @@ Thank you for your interest in contributing to @plust/datasleuth! This document 
 
 - [Code of Conduct](#code-of-conduct)
 - [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Development Workflow](#development-workflow)
-- [Pull Request Process](#pull-request-process)
-- [Coding Guidelines](#coding-guidelines)
-- [Documentation Guidelines](#documentation-guidelines)
-- [Testing Guidelines](#testing-guidelines)
+  - [Prerequisites](#prerequisites)
+  - [Development Environment Setup](#development-environment-setup)
+  - [Project Structure](#project-structure)
+- [Development Process](#development-process)
+  - [Feature Branches](#feature-branches)
+  - [Coding Standards](#coding-standards)
+  - [Testing](#testing)
+  - [Documentation](#documentation)
+- [Submitting Changes](#submitting-changes)
+  - [Pull Requests](#pull-requests)
+  - [Review Process](#review-process)
 - [Release Process](#release-process)
+- [Community](#community)
 
 ## Code of Conduct
 
-By participating in this project, you agree to abide by our Code of Conduct. We expect all contributors to be respectful and considerate of others.
+This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
 
 ## Getting Started
 
-1. Fork the repository on GitHub
-2. Clone your fork locally: `git clone https://github.com/YOUR-USERNAME/datasleuth.git`
-3. Add the original repository as an upstream remote: `git remote add upstream https://github.com/Jacques2Marais/datasleuth.git`
-4. Create a branch for your changes: `git checkout -b feature/your-feature-name`
+### Prerequisites
 
-## Development Setup
+- Node.js (v16+)
+- npm (v7+) or yarn (v1.22+)
+- Git
 
-1. Install Node.js (version 16.x or later) and npm (version 8.x or later)
-2. Navigate to the project directory: `cd datasleuth/packages/core`
-3. Install dependencies: `npm install`
-4. Build the project: `npm run build`
-5. Run tests to verify setup: `npm test`
+### Development Environment Setup
 
-## Development Workflow
+1. Fork the repository
+2. Clone your fork locally:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/datasleuth.git
+   cd datasleuth
+   ```
+3. Install dependencies:
+   ```bash
+   npm install
+   ```
+4. Set up development environment:
+   ```bash
+   npm run setup:dev
+   ```
+5. Create a branch for your contribution:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-1. Make sure your branch is up to date with upstream: `git pull upstream main`
-2. Make your changes
-3. Run linting: `npm run lint`
-4. Run formatting: `npm run format`
-5. Run tests: `npm test`
-6. Commit your changes with a descriptive message
-7. Push to your fork: `git push origin feature/your-feature-name`
-8. Create a pull request on GitHub
+### Project Structure
 
-## Pull Request Process
+The codebase is organized as follows:
 
-1. Ensure your code follows the project's coding guidelines
-2. Update documentation if necessary
-3. Add/update tests for your changes
-4. Make sure all tests, linting, and formatting checks pass
-5. Fill out the pull request template completely
-6. Request a review from maintainers
-7. Address any feedback from reviewers
-8. Once approved, a maintainer will merge your PR
+```
+packages/core/
+├── docs/               # Documentation
+│   ├── api/            # API reference
+│   └── ...
+├── examples/           # Usage examples
+│   ├── basic-research.ts
+│   └── ...
+├── src/                # Source code
+│   ├── core/           # Core functionality
+│   ├── steps/          # Research pipeline steps
+│   ├── tools/          # Integration tools
+│   ├── types/          # TypeScript type definitions
+│   ├── utils/          # Utility functions
+│   └── validators/     # Schema validators
+├── tests/              # Test suite
+│   ├── mocks/          # Test mocks
+│   └── ...
+└── ...
+```
 
-## Coding Guidelines
+## Development Process
 
-- Follow TypeScript best practices
-- Use functional programming patterns where appropriate
-- Write code that is modular, reusable, and maintainable
-- Ensure proper error handling and logging
-- Keep functions small and focused on a single responsibility
-- Use descriptive variable and function names
-- Document all public APIs with JSDoc comments
+### Feature Branches
 
-## Documentation Guidelines
+We use a feature branch workflow:
 
-### JSDoc Comments
+1. Create a branch from `main` for your feature/fix
+2. Implement your changes
+3. Submit a pull request back to `main`
 
-All public functions, classes, interfaces, and types must have JSDoc comments that include:
+### Coding Standards
 
-- A description of what the item does
-- Parameter descriptions with types
-- Return value description
-- Examples of usage
-- Exception information
+We follow TypeScript best practices and use ESLint and Prettier for code quality:
+
+- All code should be written in TypeScript
+- Follow the existing code style
+- Use meaningful variable names and comments
+- Add proper JSDoc documentation to public APIs
+- Run `npm run lint` before committing to ensure your code meets our standards
+
+Key coding patterns to follow:
+
+1. **Factory Function Pattern**: Create steps using factory functions.
+   ```typescript
+   export function myStep(options: MyStepOptions = {}): ReturnType<typeof createStep> {
+     return createStep('MyStep', executeMyStep, options);
+   }
+   ```
+
+2. **Immutable State Transformation**: Don't modify state directly.
+   ```typescript
+   function executeStep(state: ResearchState, options: StepOptions): Promise<ResearchState> {
+     return {
+       ...state,
+       data: {
+         ...state.data,
+         newData: processedResult
+       }
+     };
+   }
+   ```
+
+3. **Options Pattern**: Use optional configuration objects with defaults.
+   ```typescript
+   interface MyOptions {
+     param1?: string;
+     param2?: number;
+   }
+   
+   function myFunction(options: MyOptions = {}) {
+     const { param1 = 'default', param2 = 42 } = options;
+     // Implementation
+   }
+   ```
+
+### Testing
+
+All new features and fixes should include tests:
+
+1. Unit tests for isolated functionality
+2. Integration tests for complex interactions
+3. Run tests with `npm test` before submitting PR
+
+Test coverage should be maintained or improved with each contribution.
+
+#### Writing Tests
+
+- Use Jest for testing
+- Create mocks for external dependencies
+- Test both success and error cases
+- Verify edge cases and input validation
 
 Example:
 
 ```typescript
-/**
- * Creates an analysis step for the research pipeline
- * 
- * This function creates a step that analyzes research data using AI to extract insights, 
- * identify patterns, and provide recommendations based on the specified focus area.
- * 
- * @param options - Configuration options for the analysis step
- * @param options.focus - The focus area for analysis (e.g., 'market-trends')
- * @param options.llm - Language model to use (falls back to state.defaultLLM if not provided)
- * @returns A configured analysis step for the research pipeline
- * 
- * @example
- * ```typescript
- * import { research, analyze } from '@plust/datasleuth';
- * 
- * const results = await research({
- *   query: "Impact of AI on healthcare",
- *   steps: [
- *     analyze({
- *       focus: 'ethical-considerations',
- *       llm: openai('gpt-4o')
- *     })
- *   ],
- *   outputSchema: outputSchema
- * });
- * ```
- */
+describe('myFunction', () => {
+  it('should process valid input correctly', () => {
+    // Test implementation
+  });
+  
+  it('should handle empty input gracefully', () => {
+    // Test implementation
+  });
+  
+  it('should throw appropriate error for invalid input', () => {
+    // Test implementation
+  });
+});
 ```
 
-### README and Other Documentation
+### Documentation
 
-- Keep documentation up to date
-- Include examples for all major features
-- Use proper markdown formatting
-- Include diagrams or images where helpful
-- Document all API endpoints and parameters
-- Include troubleshooting information
+Documentation is a crucial part of this project:
 
-## Testing Guidelines
+- Add JSDoc comments to all exported functions, classes, and interfaces
+- Update relevant README sections when adding features
+- Add usage examples for new functionality
+- Update API documentation for interface changes
+- Keep the CHANGELOG.md updated with notable changes
 
-- Write unit tests for all new functionality
-- Maintain or improve test coverage
-- Use mocks for external dependencies
-- Test error cases and edge conditions
-- Write integration tests for important workflows
-- Keep tests fast and reliable
+## Submitting Changes
+
+### Pull Requests
+
+When submitting a pull request:
+
+1. Update relevant documentation
+2. Add tests for new functionality
+3. Ensure all tests pass
+4. Update the CHANGELOG.md with your changes under the "Unreleased" section
+5. Fill in the pull request template completely
+
+### Review Process
+
+All submissions require review before being merged:
+
+1. Automated checks must pass (tests, linting, type checking)
+2. At least one core maintainer must approve changes
+3. Address feedback and make requested changes
+4. Once approved, a maintainer will merge your PR
 
 ## Release Process
 
-1. Update the version number in package.json
-2. Update the CHANGELOG.md file
-3. Run the full test suite
-4. Generate documentation
-5. Submit a PR for release preparation
-6. Once merged, tag the release: `git tag v1.x.x`
-7. Push the tag: `git push upstream v1.x.x`
-8. Publish to npm: `npm publish`
+The project follows semantic versioning:
+
+- MAJOR version for incompatible API changes
+- MINOR version for backward-compatible functionality additions
+- PATCH version for backward-compatible bug fixes
+
+## Community
+
+- Join our [Discord server](https://discord.gg/example) for discussions
+- Check the [GitHub issues](https://github.com/example/datasleuth/issues) for ways to contribute
+- Report bugs and request features through GitHub issues
 
 Thank you for contributing to @plust/datasleuth!

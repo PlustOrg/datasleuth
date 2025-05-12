@@ -1,10 +1,10 @@
 # @plust/datasleuth Development Guide
 
 ## Instructions
-Keep code clean, modular and extensible. Add emoji to each response to ensure context. Plan next steps after each response. Read `docs/project-overview.md` periodically.
+Keep code clean, modular and extensible. Add emoji to each response to ensure context. Plan next steps after each response.
 
 ## Goal
-Build a deep research tool as an npm package. Users provide a search query and output schema, and receive structured research results.
+Build a deep research tool as an npm package. Users provide a search query and output schema, and receive structured research results through a modular pipeline of configurable steps.
 
 ## Project Requirements
 - Node.js package (`npm install @plust/datasleuth`)
@@ -35,47 +35,55 @@ Build a deep research tool as an npm package. Users provide a search query and o
 ### ⏭️ Next Steps
 - Package preparation for npm distribution
 
-## How It Works
-Uses modular pipeline with configurable steps to plan research, search web, extract content, evaluate results, refine queries, analyze data, run parallel tracks, and merge findings. Users interact through a simple `research()` API.
+## Architecture
 
-## Development Plan
+The project uses a **pipeline-based architecture**:
 
-Based on the current project status, here's the implementation plan:
+1. **Core API**: The `research()` function serves as the main entry point
+2. **Pipeline Engine**: Executes steps sequentially with state management
+3. **Research Steps**: Modular, composable functions for different research tasks
+4. **Schema Validation**: Uses Zod for input/output validation
 
-### ✅ 1. Type System Improvements (Completed)
-- Replaced all `any`/`unknown` type usages with proper type definitions
-- Added stricter type checking for pipeline steps and their inputs/outputs
-- Created more specific interfaces for different research data structures
-- Added proper generics for schema validation in the research pipeline
-- Created type guards for runtime type checking
-- Implemented compatibility layers for external dependencies
+## Key Components
 
-### ✅ 2. LLM Integration (Completed)
-- Implement real LLM integrations in plan.ts, analyze.ts, and other AI-dependent steps
-- Create proper abstractions for different LLM providers using the Vercel AI SDK
-- Add configurable LLM options (model, temperature, etc.) to relevant steps
-- Create utility functions for consistent prompt construction
-- Integrate with mastra for advanced AI agent capabilities
+### Core 
+- `research.ts`: Main API function and default pipeline configuration
+- `pipeline.ts`: Pipeline execution engine with error handling and state management
 
-### ✅ 3. Error Handling Enhancements (Completed)
-- Create specialized error classes that implement ResearchError
-- Implement consistent error handling patterns across all steps
-- Add retry mechanisms for external API calls (search, LLM, etc.)
-- Provide detailed error messages and suggestions for recovery
-- Add proper logging at different verbosity levels
+### Research Steps
+- `plan.ts`: Creates a research plan with objectives and search queries
+- `searchWeb.ts`: Performs web searches using configured providers
+- `extractContent.ts`: Extracts content from web pages
+- `factCheck.ts`: Validates information using LLMs
+- `analyze.ts`: Performs specialized analysis on collected data
+- `refineQuery.ts`: Improves search queries based on findings
+- `summarize.ts`: Synthesizes information into concise summaries
+- `flowControl.ts`: Conditional logic (`evaluate`, `repeatUntil`)
+- `orchestrate.ts`: Uses AI agents to make decisions about research steps
+- `track.ts`: Creates isolated research tracks for focused investigations
+- `parallel.ts`: Executes multiple tracks concurrently for efficiency
+- `classify.ts`: Performs entity classification and clustering on research data
 
-### ✅ 4. Testing Framework (Completed)
-- Created unit tests for individual steps
-- Developed integration tests for the full pipeline
-- Implemented mock providers for testing (plan, search, fact-check, summarize)
-- Created test fixtures for common research scenarios
-- Added error simulation and recovery testing
+### Utils & Types
+- `steps.ts`: Utilities for creating standardized pipeline steps
+- `pipeline.ts` (types): Core interfaces for the research pipeline
+- `merge.ts`: Utilities for merging results from parallel research tracks
+- `retry.ts`: Utilities for retrying operations with configurable backoff
+- `logging.ts`: Structured logging with configurable verbosity levels
+- `errors.ts`: Error classes and handling utilities
 
-### 🔄 5. Documentation (In Progress)
-- Enhance JSDoc comments throughout the codebase
-- Create usage examples with real-world scenarios
-- Add troubleshooting guides and best practices
-- Document all available options and configurations
+## Key Coding Patterns
+
+1. **Factory Function Pattern**: Steps created through factory functions that accept options and return standardized step objects
+2. **Immutable State Transformation**: Steps take current state as input and return new state without modifying original
+3. **Options Pattern**: Steps accept optional configuration objects with sensible defaults
+4. **Composition Pattern**: Complex research flows built by composing simpler steps
+5. **Schema Validation**: Input/output validation with Zod
+6. **Robust Error Handling**: Standardized error classes with helpful error messages and recovery suggestions
+7. **Retry Pattern**: Operations with external dependencies use configurable retry mechanisms
+8. **Parallel Processing Pattern**: Support for concurrent execution via track and parallel mechanisms
+9. **Conflict Resolution Pattern**: Strategies for resolving conflicting information from parallel tracks
+10. **Test-Driven Development**: Comprehensive test coverage with mocking of external dependencies
 
 ## Use-Case Examples
 
@@ -218,10 +226,42 @@ const parallelResearch = await research({
 13. Errors in `catch` blocks are auto-typed as `unknown`. Use type guards to get the actual type.
 14. Test error conditions with proper mocking and type assertions
 
-## Vercel AI SDK Docs
+## Code Examples
 
-Short example of using the AI SDK for reference:
+### Factory Function Pattern
+```typescript
+export function plan(options: PlanOptions = {}): ReturnType<typeof createStep> {
+  return createStep('Plan', executePlanStep, options);
+}
+```
 
+### Immutable State Transformation
+```typescript
+function executeStep(state: ResearchState, options: StepOptions): Promise<ResearchState> {
+  // Process the current state
+  return {
+    ...state,
+    data: {
+      ...state.data,
+      newData: processedResult
+    }
+  };
+}
+```
+
+### Retry Pattern
+```typescript
+const result = await executeWithRetry(
+  () => searchProvider.search(query),
+  {
+    maxRetries: 3,
+    initialDelay: 1000,
+    backoffFactor: 2
+  }
+);
+```
+
+## Vercel AI SDK Example
 ```typescript
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
@@ -231,5 +271,4 @@ const { text } = await generateText({
   system: 'You are a helpful assistant.',
   prompt: 'Explain quantum entanglement.',
 });
-console.log(text);
 ```
