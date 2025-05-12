@@ -1,20 +1,30 @@
 {
   "name": "@plust/datasleuth",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Deep research tool for gathering and synthesizing information with AI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "directories": {
     "doc": "docs",
     "example": "examples",
     "test": "tests"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json",
+    "build:prod": "tsc -p tsconfig.prod.json",
     "clean": "rimraf dist",
     "dev": "tsc --watch",
-    "lint": "eslint 'src/**/*.ts'",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
     "format": "prettier --write 'src/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts'",
     "test": "jest --json --outputFile=test-output.json",
     "test:console": "jest",
     "test:watch": "jest --watch",
@@ -23,13 +33,32 @@
     "example:advanced": "ts-node examples/advanced-research.ts",
     "example:orchestration": "ts-node examples/orchestration-research.ts",
     "example:comprehensive": "ts-node examples/comprehensive-research.ts",
+    "example:parallel": "ts-node examples/parallel-research.ts",
+    "example:classification": "ts-node examples/classification-research.ts",
+    "example:llm-integration": "ts-node examples/llm-integration-research.ts",
+    "example:error-handling": "ts-node examples/error-handling.ts",
+    "example:all": "npm run example:basic && npm run example:advanced && npm run example:orchestration && npm run example:comprehensive && npm run example:parallel && npm run example:classification && npm run example:llm-integration && npm run example:error-handling",
     "docs": "typedoc --entryPointStrategy expand --out docs/api src/index.ts",
     "docs:watch": "typedoc --entryPointStrategy expand --out docs/api --watch src/index.ts",
-    "prepublishOnly": "npm run clean && npm run build && npm run docs"
+    "prebuild": "npm run clean",
+    "prepare": "npm run build:prod",
+    "prepublishOnly": "node scripts/verify-peer-deps.js && node scripts/security-check.js && npm run lint && npm run test:console && npm run build:prod && npm run docs",
+    "release": "npm run prepublishOnly && npm publish --access public",
+    "release:next": "npm run prepublishOnly && npm publish --tag next --access public",
+    "release:dry": "npm pack --dry-run",
+    "validate": "npm run lint && npm run test:console && npm run build",
+    "verify:deps": "node scripts/verify-peer-deps.js",
+    "verify:security": "node scripts/security-check.js",
+    "size": "npm pack --dry-run && du -h *.tgz && rm -f *.tgz",
+    "outdated": "npm outdated",
+    "audit": "npm audit",
+    "audit:fix": "npm audit fix",
+    "update": "npm update",
+    "check:all": "npm run lint && npm run format:check && npm run test:coverage && npm run build && npm run verify:deps && npm run verify:security"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jacques2Marais/datasleuth.git"
+    "url": "git+https://github.com/PlustOrg/datasleuth.git"
   },
   "keywords": [
     "research",
@@ -38,26 +67,43 @@
     "information",
     "search",
     "pipeline",
-    "orchestration"
+    "orchestration",
+    "deep-research",
+    "data-analysis",
+    "ai-research",
+    "fact-checking",
+    "web-search",
+    "knowledge-mining",
+    "information-extraction"
   ],
   "author": "Jacques Marais",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Jacques2Marais/datasleuth/issues"
+    "url": "https://github.com/PlustOrg/datasleuth/issues"
   },
-  "homepage": "https://github.com/Jacques2Marais/datasleuth#readme",
+  "homepage": "https://github.com/PlustOrg/datasleuth#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@plust/search-sdk": "^1.0.0",
-    "ai": "^4.3.15",
     "axios": "^1.9.0",
     "cheerio": "^1.0.0",
-    "mastra": "^0.6.1",
-    "zod": "^3.24.4"
+    "mastra": "^0.6.1"
+  },
+  "peerDependencies": {
+    "ai": "^4.0.0",
+    "zod": "^3.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "9.26.0",
     "@types/jest": "^29.5.14",
     "@typescript-eslint/eslint-plugin": "^7.4.0",
     "@typescript-eslint/parser": "^7.4.0",
+    "ai": "^4.3.15",
     "eslint": "^9.26.0",
     "jest": "^29.7.0",
     "ollama-ai-provider": "^1.2.0",
@@ -66,7 +112,9 @@
     "ts-jest": "^29.3.2",
     "ts-node": "^10.9.2",
     "typedoc": "^0.28.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "8.32.0",
+    "zod": "^3.24.4"
   },
   "jest": {
     "preset": "ts-jest",

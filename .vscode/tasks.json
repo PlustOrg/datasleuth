@@ -1,0 +1,92 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "build",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$tsc"],
+      "label": "npm: build",
+      "detail": "Build the project"
+    },
+    {
+      "type": "npm",
+      "script": "build:prod",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "label": "npm: build:prod",
+      "detail": "Build for production"
+    },
+    {
+      "type": "npm",
+      "script": "test:console",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": ["$tsc-jest"],
+      "label": "npm: test",
+      "detail": "Run tests"
+    },
+    {
+      "type": "npm",
+      "script": "test:coverage",
+      "group": "test",
+      "problemMatcher": ["$tsc-jest"],
+      "label": "npm: test:coverage",
+      "detail": "Run tests with coverage"
+    },
+    {
+      "type": "npm",
+      "script": "lint",
+      "problemMatcher": ["$eslint-stylish"],
+      "label": "npm: lint",
+      "detail": "Lint the project"
+    },
+    {
+      "type": "npm",
+      "script": "format",
+      "problemMatcher": [],
+      "label": "npm: format",
+      "detail": "Format code with Prettier"
+    },
+    {
+      "type": "npm",
+      "script": "docs",
+      "problemMatcher": [],
+      "label": "npm: docs",
+      "detail": "Build API documentation"
+    },
+    {
+      "type": "npm",
+      "script": "validate",
+      "problemMatcher": ["$tsc", "$eslint-stylish"],
+      "label": "npm: validate",
+      "detail": "Validate the project (lint, test, build)"
+    },
+    {
+      "type": "npm",
+      "script": "check:all",
+      "problemMatcher": ["$tsc", "$eslint-stylish"],
+      "label": "npm: check:all",
+      "detail": "Run all checks (lint, format, test, build, verify)"
+    },
+    {
+      "type": "npm",
+      "script": "release:dry",
+      "problemMatcher": [],
+      "label": "npm: release:dry",
+      "detail": "Dry run of package release"
+    },
+    {
+      "type": "shell",
+      "command": "mkdir -p coverage && open coverage/lcov-report/index.html",
+      "label": "Open coverage report",
+      "detail": "Open test coverage report in browser",
+      "problemMatcher": []
+    }
+  ]
+}
