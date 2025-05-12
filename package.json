@@ -1,6 +1,6 @@
 {
   "name": "@plust/datasleuth",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Build LLM-powered research pipelines and output structured data.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
