@@ -324,13 +324,14 @@ import {
   transform,
 } from '@plust/datasleuth';
 import { z } from 'zod';
-import { google, scholar } from '@plust/search-sdk';
+import { google, serpapi } from '@plust/search-sdk';
 import { openai } from '@ai-sdk/openai';
 
 // Configure search providers
 const webSearch = google.configure({ apiKey: process.env.GOOGLE_API_KEY });
-const academicSearch = scholar.configure({
-  apiKey: process.env.SCHOLAR_API_KEY,
+const academicSearch = serpapi.configure({
+  apiKey: process.env.SERPAPI_KEY,
+  engine: 'google_scholar',
 });
 
 // Execute research with orchestration
