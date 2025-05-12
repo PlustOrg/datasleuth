@@ -37,21 +37,18 @@ npm install @plust/datasleuth
 
 ## Key Features
 
-- 🔍 **Comprehensive Research**: Go beyond simple searches with intelligent
+- **Comprehensive Research**: Go beyond simple searches with intelligent
   research pipelines
-- 🤖 **AI-Powered Planning**: Automatically generate research plans and
-  strategies
-- 🌐 **Web Integration**: Connect to search engines and content sources
-- 📊 **Deep Analysis**: Extract and analyze information with AI
-- 🔄 **Adaptive Research**: Refine queries and follow leads with feedback loops
-- 📚 **Structured Results**: Get consistently formatted data with schema
-  validation
-- 🔧 **Extensible Architecture**: Build custom research steps and tools
-- 🧠 **Multiple LLM Support**: Integrate with any AI provider through Vercel AI
-  SDK
-- 🚀 **Parallel Processing**: Run multiple research tracks concurrently
-- 🔍 **Fact Checking**: Validate findings with AI-powered verification
-- 📈 **Entity Analysis**: Classify and cluster entities in research data
+- **AI-Powered Planning**: Automatically generate research plans and strategies
+- **Web Integration**: Connect to search engines and content sources
+- **Deep Analysis**: Extract and analyze information with AI
+- **Adaptive Research**: Refine queries and follow leads with feedback loops
+- **Structured Results**: Get consistently formatted data with schema validation
+- **Extensible Architecture**: Build custom research steps and tools
+- **Multiple LLM Support**: Integrate with any AI provider through Vercel AI SDK
+- **Parallel Processing**: Run multiple research tracks concurrently
+- **Fact Checking**: Validate findings with AI-powered verification
+- **Entity Analysis**: Classify and cluster entities in research data
 
 ## Quick Start
 
