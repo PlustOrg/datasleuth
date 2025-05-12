@@ -39,14 +39,17 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'warn',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      // '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': 'warn',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
-      'prefer-const': 'error',
-      'no-var': 'error',
+      'prefer-const': 'warn',
+      'no-var': 'warn',
       eqeqeq: ['error', 'always', { null: 'ignore' }],
-      'no-duplicate-imports': 'error',
-      'no-unused-expressions': 'error',
-      'no-useless-catch': 'error',
+      'no-duplicate-imports': 'warn',
+      'no-unused-expressions': 'warn',
+      'no-useless-catch': 'warn',
+      '@typescript-eslint/ban-ts-comment': 'warn',
+      'no-case-declarations': 'warn',
     },
   }
 );

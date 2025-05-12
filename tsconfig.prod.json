@@ -6,8 +6,8 @@
     "removeComments": false,
     "incremental": false,
     "stripInternal": true,
-    "noUnusedLocals": false, // Relaxed for production build
-    "noUnusedParameters": false, // Relaxed for production build
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "rootDir": "src",
     "outDir": "dist",
     "declaration": true,
