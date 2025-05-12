@@ -1,5 +1,5 @@
 /**
- * @plust/deep-restruct
+ * @plust/datasleuth
  * A deep research tool for gathering and synthesizing information
  */
 

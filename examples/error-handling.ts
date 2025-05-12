@@ -1,8 +1,8 @@
 /**
- * Example demonstrating error handling in @plust/deep-restruct
+ * Example demonstrating error handling in @plust/datasleuth
  */
 
-import { research, plan, searchWeb, extractContent, summarize } from '@plust/deep-restruct';
+import { research, plan, searchWeb, extractContent, summarize } from '@plust/datasleuth';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { 
@@ -11,7 +11,7 @@ import {
   NetworkError, 
   isNetworkError, 
   isLLMError 
-} from '@plust/deep-restruct';
+} from '@plust/datasleuth';
 
 // Example schema for the research output
 const outputSchema = z.object({

@@ -1,4 +1,4 @@
-# @plust/deep-restruct Development Guide
+# @plust/datasleuth Development Guide
 
 ## Instructions
 Keep code clean, modular and extensible. Add emoji to each response to ensure context. Plan next steps after each response. Read `docs/project-overview.md` periodically.
@@ -7,7 +7,7 @@ Keep code clean, modular and extensible. Add emoji to each response to ensure co
 Build a deep research tool as an npm package. Users provide a search query and output schema, and receive structured research results.
 
 ## Project Requirements
-- Node.js package (`npm install @plust/deep-restruct`)
+- Node.js package (`npm install @plust/datasleuth`)
 - TypeScript with ESLint/Prettier
 - Modular files with single responsibility
 - Required packages: `mastra` (AI agents), `zod` (validation), `ai` SDK (LLM integration), `@plust/search-sdk` (web searches)
@@ -81,7 +81,7 @@ Based on the current project status, here's the implementation plan:
 
 ### Basic Research
 ```typescript
-import { research } from '@plust/deep-restruct';
+import { research } from '@plust/datasleuth';
 import { z } from 'zod';
 
 const results = await research({
@@ -97,7 +97,7 @@ const results = await research({
 ### Advanced Research
 ```typescript
 import { research, plan, searchWeb, extractContent, factCheck, 
-         repeatUntil, evaluate, refineQuery, summarize } from '@plust/deep-restruct';
+         repeatUntil, evaluate, refineQuery, summarize } from '@plust/datasleuth';
 import { z } from 'zod';
 import { google } from '@plust/search-sdk';
 import { openai } from '@ai-sdk/openai';
@@ -140,7 +140,7 @@ const detailedResearch = await research({
 ### Parallel Research
 ```typescript
 import { research, track, parallel, searchWeb, extractContent, analyze, 
-         classify, summarize, ResultMerger } from '@plust/deep-restruct';
+         classify, summarize, ResultMerger } from '@plust/datasleuth';
 import { z } from 'zod';
 import { google, bing } from '@plust/search-sdk';
 

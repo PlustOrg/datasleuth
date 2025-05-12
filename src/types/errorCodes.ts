@@ -1,5 +1,5 @@
 /**
- * Comprehensive list of error codes used throughout the @plust/deep-restruct package
+ * Comprehensive list of error codes used throughout the @plust/datasleuth package
  */
 export type ErrorCode =
   // Configuration errors

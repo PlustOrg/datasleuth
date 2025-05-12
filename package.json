@@ -1,5 +1,5 @@
 {
-  "name": "@plust/deep-restruct",
+  "name": "@plust/datasleuth",
   "version": "1.0.0",
   "description": "Deep research tool for gathering and synthesizing information with AI",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jacques2Marais/deep-restruct.git"
+    "url": "git+https://github.com/Jacques2Marais/datasleuth.git"
   },
   "keywords": [
     "research",
@@ -41,9 +41,9 @@
   "author": "Jacques Marais",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Jacques2Marais/deep-restruct/issues"
+    "url": "https://github.com/Jacques2Marais/datasleuth/issues"
   },
-  "homepage": "https://github.com/Jacques2Marais/deep-restruct#readme",
+  "homepage": "https://github.com/Jacques2Marais/datasleuth#readme",
   "dependencies": {
     "@plust/search-sdk": "^1.0.0",
     "ai": "^4.3.15",

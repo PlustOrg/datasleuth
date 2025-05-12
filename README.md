@@ -1,11 +1,11 @@
-# @plust/deep-restruct
+# @plust/datasleuth
 
 A powerful deep research tool for gathering and synthesizing information with AI. This package enables developers to perform comprehensive research on any topic with a simple functional API, returning structured results based on a specified schema.
 
 ## Installation
 
 ```bash
-npm install @plust/deep-restruct
+npm install @plust/datasleuth
 ```
 
 ## Features
@@ -22,7 +22,7 @@ npm install @plust/deep-restruct
 ## Basic Usage
 
 ```typescript
-import { research } from '@plust/deep-restruct';
+import { research } from '@plust/datasleuth';
 import { z } from 'zod';
 
 // Define the structure of your research results
@@ -51,7 +51,7 @@ import {
   extractContent, 
   evaluate, 
   repeatUntil 
-} from '@plust/deep-restruct';
+} from '@plust/datasleuth';
 import { z } from 'zod';
 import { google } from '@plust/search-sdk';
 
@@ -101,10 +101,10 @@ const results = await research({
 
 ## LLM Integration with Vercel AI SDK
 
-@plust/deep-restruct seamlessly integrates with the Vercel AI SDK, allowing you to use any supported LLM as a drop-in component:
+@plust/datasleuth seamlessly integrates with the Vercel AI SDK, allowing you to use any supported LLM as a drop-in component:
 
 ```typescript
-import { research, plan, analyze, factCheck, summarize } from '@plust/deep-restruct';
+import { research, plan, analyze, factCheck, summarize } from '@plust/datasleuth';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
@@ -174,7 +174,7 @@ import {
   orchestrate, 
   searchWeb, 
   extractContent 
-} from '@plust/deep-restruct';
+} from '@plust/datasleuth';
 import { z } from 'zod';
 import { google, scholar } from '@plust/search-sdk';
 import { openai } from 'ai';

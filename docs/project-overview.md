@@ -1,10 +1,10 @@
-# Project Overview: @plust/deep-restruct
+# Project Overview: @plust/datasleuth
 
-This document provides a concise overview of the @plust/deep-restruct project structure and implementation. It's designed for AI coding agents to quickly understand the project without prior knowledge.
+This document provides a concise overview of the @plust/datasleuth project structure and implementation. It's designed for AI coding agents to quickly understand the project without prior knowledge.
 
 ## Project Purpose
 
-@plust/deep-restruct is a TypeScript library that provides a powerful framework for deep research tasks using AI. It enables developers to perform comprehensive research on any topic with a simple functional API, returning structured results based on a specified schema.
+@plust/datasleuth is a TypeScript library that provides a powerful framework for deep research tasks using AI. It enables developers to perform comprehensive research on any topic with a simple functional API, returning structured results based on a specified schema.
 
 ## Architecture
 
@@ -183,7 +183,7 @@ The project employs several consistent coding patterns:
 
 Basic example:
 ```typescript
-import { research } from '@plust/deep-restruct';
+import { research } from '@plust/datasleuth';
 import { z } from 'zod';
 
 const results = await research({
@@ -205,7 +205,7 @@ import {
   extractContent, 
   evaluate, 
   repeatUntil 
-} from '@plust/deep-restruct';
+} from '@plust/datasleuth';
 
 const results = await research({
   query: "Impact of climate change on agriculture",
@@ -235,7 +235,7 @@ import {
   extractContent,
   analyze, 
   ResultMerger 
-} from '@plust/deep-restruct';
+} from '@plust/datasleuth';
 
 const results = await research({
   query: "Quantum computing advancements",

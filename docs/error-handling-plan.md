@@ -1,6 +1,6 @@
-# Error Handling Enhancement Plan for @plust/deep-restruct
+# Error Handling Enhancement Plan for @plust/datasleuth
 
-This document outlines the comprehensive plan for enhancing error handling in the @plust/deep-restruct package.
+This document outlines the comprehensive plan for enhancing error handling in the @plust/datasleuth package.
 
 ## Goals
 

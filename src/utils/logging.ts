@@ -1,5 +1,5 @@
 /**
- * Logging utility for the @plust/deep-restruct package
+ * Logging utility for the @plust/datasleuth package
  */
 
 /**
