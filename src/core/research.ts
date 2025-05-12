@@ -35,13 +35,45 @@ const researchStepSchema = z.object({
 });
 
 /**
- * Main research function - the primary API for the package
+ * Main research function - the primary API for the @plust/datasleuth package
  * 
- * @param input The research input with query, output schema, optional steps, and default LLM
- * @returns The research results in the structure defined by outputSchema
- * @throws {ConfigurationError} When configuration is invalid
- * @throws {ValidationError} When output doesn't match schema
+ * This function orchestrates the entire research process from query to results.
+ * It takes a research query, an output schema for validation, and optional 
+ * configuration parameters to customize the research process.
+ * 
+ * @param input The research configuration object
+ * @param input.query The research query string (e.g., "Latest advancements in quantum computing")
+ * @param input.outputSchema A Zod schema defining the structure of the expected output
+ * @param input.steps Optional array of research steps to use (defaults to standard pipeline if not provided)
+ * @param input.config Optional configuration for the research pipeline (error handling, timeout, etc.)
+ * @param input.defaultLLM Optional default language model to use for AI-dependent steps (required if using default steps)
+ * 
+ * @returns The research results matching the structure defined by outputSchema
+ * 
+ * @throws {ConfigurationError} When configuration is invalid (missing required parameters, etc.)
+ * @throws {ValidationError} When output doesn't match the provided schema
  * @throws {BaseResearchError} For other research-related errors
+ * 
+ * @example
+ * ```typescript
+ * import { research } from '@plust/datasleuth';
+ * import { z } from 'zod';
+ * import { openai } from '@ai-sdk/openai';
+ * 
+ * // Define your output schema
+ * const outputSchema = z.object({
+ *   summary: z.string(),
+ *   keyFindings: z.array(z.string()),
+ *   sources: z.array(z.string().url())
+ * });
+ * 
+ * // Execute research
+ * const results = await research({
+ *   query: "Latest advancements in quantum computing",
+ *   outputSchema,
+ *   defaultLLM: openai('gpt-4o')
+ * });
+ * ```
  */
 export async function research(input: ResearchInput): Promise<ResearchResult> {
   try {

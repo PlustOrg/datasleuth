@@ -45,10 +45,39 @@ const defaultOnRetry = (attempt: number, error: unknown, delay: number): void =>
 /**
  * Execute a function with automatic retry for transient errors
  * 
- * @param fn The function to execute with retry logic
- * @param options Retry configuration options
+ * This utility function wraps an asynchronous operation with retry logic that
+ * can handle transient failures. It supports exponential backoff, customizable
+ * retry conditions, and notifications on retry attempts.
+ * 
+ * @param fn - The async function to execute with retry logic
+ * @param options - Retry configuration options
+ * @param options.maxRetries - Maximum number of retry attempts (default: 3)
+ * @param options.retryDelay - Initial delay between retries in milliseconds (default: 1000)
+ * @param options.backoffFactor - Factor by which to increase delay on each retry (default: 2)
+ * @param options.retryableErrors - Function to determine if an error is retryable
+ * @param options.onRetry - Function to run before each retry attempt
+ * 
  * @returns The result of the function execution
  * @throws The last error encountered if all retries fail
+ * 
+ * @example
+ * ```typescript
+ * import { executeWithRetry } from '@plust/datasleuth';
+ * 
+ * const result = await executeWithRetry(
+ *   async () => await fetchDataFromAPI(url),
+ *   {
+ *     maxRetries: 3,
+ *     retryDelay: 1000,
+ *     backoffFactor: 2,
+ *     retryableErrors: (error) => {
+ *       // Retry on network errors or rate limiting
+ *       return error instanceof NetworkError || 
+ *              (error instanceof APIError && error.status === 429);
+ *     }
+ *   }
+ * );
+ * ```
  */
 export async function executeWithRetry<T>(
   fn: () => Promise<T>,

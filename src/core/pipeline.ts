@@ -1,5 +1,11 @@
 /**
  * Core pipeline execution engine
+ * 
+ * This module provides the infrastructure for executing research pipelines.
+ * It handles step execution, error management, retries, timeouts, and state management
+ * throughout the research process.
+ * 
+ * @module core/pipeline
  */
 
 import { 
@@ -34,7 +40,27 @@ const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
 };
 
 /**
- * Creates a new research state
+ * Creates the initial state object for a research pipeline
+ * 
+ * @param query - The research query string
+ * @param outputSchema - A Zod schema that defines the expected output structure
+ * @returns A fresh ResearchState object initialized with the provided query and schema
+ * 
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ * import { createInitialState } from '@plust/datasleuth';
+ * 
+ * const outputSchema = z.object({
+ *   summary: z.string(),
+ *   findings: z.array(z.string())
+ * });
+ * 
+ * const initialState = createInitialState(
+ *   "What are the latest advancements in renewable energy?",
+ *   outputSchema
+ * );
+ * ```
  */
 export function createInitialState(query: string, outputSchema: z.ZodType<ResearchResult>): ResearchState {
   return {

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs/api",
+  "name": "@plust/datasleuth",
+  "includeVersion": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "categorizeByGroup": true,
+  "categoryOrder": [
+    "Core",
+    "Steps",
+    "Utils",
+    "Types",
+    "*"
+  ],
+  "navigationLinks": {
+    "GitHub": "https://github.com/Jacques2Marais/datasleuth",
+    "npm": "https://www.npmjs.com/package/@plust/datasleuth"
+  },
+  "searchInComments": true,
+  "visibilityFilters": {
+    "protected": false,
+    "private": false,
+    "inherited": true,
+    "external": true
+  },
+  "readme": "README.md",
+  "sort": ["source-order"]
+}

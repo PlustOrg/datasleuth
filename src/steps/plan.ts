@@ -44,22 +44,62 @@ Be specific, practical, and thorough. Consider what types of information would b
 `;
 
 /**
- * Options for the planning step
+ * Configuration options for the research planning step
+ * 
+ * This interface defines all the configurable aspects of the planning step,
+ * including the language model to use, prompt customization, and result handling.
+ * 
+ * @interface PlanOptions
+ * @property {string} [customPrompt] - Custom system prompt to override the default
+ * @property {LanguageModel} [llm] - Language model to use for generating the plan (falls back to state.defaultLLM if not provided)
+ * @property {number} [temperature=0.4] - Temperature setting for the language model (0.0-1.0)
+ * @property {boolean} [includeInResults=true] - Whether to include the plan in the final research results
+ * @property {string[]} [additionalInstructions] - Optional additional instructions to append to the system prompt
+ * @property {number} [maxRetries=3] - Maximum number of retry attempts for LLM generation
+ * @property {number} [initialBackoff=1000] - Initial backoff time in milliseconds for retries
+ * @property {number} [backoffFactor=1.5] - Backoff factor for exponential backoff between retries
  */
 export interface PlanOptions {
-  /** Custom system prompt to override the default */
+  /** 
+   * Custom system prompt to override the default
+   * Use this to provide specialized instructions for plan generation
+   */
   customPrompt?: string;
-  /** Model to use for planning (from the AI SDK) */
+  
+  /** 
+   * Language model to use for planning (from the Vercel AI SDK)
+   * If not provided, will fall back to the defaultLLM from the research state
+   * 
+   * @example
+   * ```typescript
+   * plan({ llm: openai('gpt-4o') })
+   * ```
+   */
   llm?: LanguageModel;
-  /** Temperature for the LLM (0.0 to 1.0) */
+  
+  /**
+   * Temperature for the LLM (0.0 to 1.0)
+   * Lower values produce more deterministic results
+   * Higher values produce more creative/varied results
+   * @default 0.4
+   */
   temperature?: number;
-  /** Whether to include the research plan in the final results */
+  
+  /**
+   * Whether to include the research plan in the final results
+   * Set to false if you only want to use the plan internally
+   * @default true
+   */
   includeInResults?: boolean;
-  /** Retry configuration */
+  
+  /**
+   * Retry configuration for language model calls
+   * Useful for handling transient errors in LLM services
+   */
   retry?: {
-    /** Maximum number of retries */
+    /** Maximum number of retries (default: 2) */
     maxRetries?: number;
-    /** Base delay between retries in ms */
+    /** Base delay between retries in ms (default: 1000) */
     baseDelay?: number;
   };
 }
@@ -273,8 +313,41 @@ async function generateResearchPlanWithLLM(
 /**
  * Creates a planning step for the research pipeline
  * 
+ * This step uses an LLM to generate a structured research plan based on the query.
+ * The plan includes objectives, search queries, relevant factors, data gathering
+ * strategy, and expected outcomes.
+ * 
  * @param options Configuration options for the planning step
+ * @param options.customPrompt Custom prompt to override the default planning prompt
+ * @param options.llm Language model to use (from Vercel AI SDK)
+ * @param options.temperature Temperature for the LLM (0.0-1.0, defaults to 0.4)
+ * @param options.includeInResults Whether to include the plan in final results (defaults to true)
+ * @param options.retry Retry configuration for LLM calls
+ * 
  * @returns A planning step for the research pipeline
+ * 
+ * @example
+ * ```typescript
+ * import { research, plan } from '@plust/datasleuth';
+ * import { openai } from '@ai-sdk/openai';
+ * 
+ * const results = await research({
+ *   query: "Renewable energy trends",
+ *   steps: [
+ *     plan({
+ *       llm: openai('gpt-4o'),
+ *       temperature: 0.5,
+ *       includeInResults: true
+ *     }),
+ *     // Additional steps...
+ *   ],
+ *   outputSchema
+ * });
+ * ```
+ * 
+ * @throws {LLMError} When the language model fails to generate a plan
+ * @throws {ValidationError} When the generated plan doesn't match the expected schema
+ * @throws {ConfigurationError} When required configuration is missing
  */
 export function plan(options: PlanOptions = {}): ReturnType<typeof createStep> {
   return createStep(

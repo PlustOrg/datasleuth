@@ -1,6 +1,13 @@
 /**
  * Analysis step for the research pipeline
- * Extracts insights on specific topics or aspects from collected data
+ * 
+ * This module provides specialized analysis functionality for examining collected
+ * research data. It uses AI to extract insights, patterns, and implications based on 
+ * a specified focus area. The analyzer can process various types of data including 
+ * search results, extracted content, and previous analysis.
+ * 
+ * @module steps/analyze
+ * @category Steps
  */
 import * as mastra from 'mastra';
 import { createStep } from '../utils/steps';
@@ -17,6 +24,11 @@ import { executeWithRetry } from '../utils/retry';
 
 /**
  * Schema for analysis results
+ * 
+ * Defines the structure for analysis output, including insights, confidence score,
+ * supporting evidence, and recommendations.
+ * 
+ * @private
  */
 const analysisResultSchema = z.object({
   focus: z.string(),
@@ -413,8 +425,43 @@ ${includeRecommendations ? 'Provide actionable recommendations based on your ana
 /**
  * Creates an analysis step for the research pipeline
  * 
- * @param options Configuration options for analysis
- * @returns An analysis step for the research pipeline
+ * This function creates a step that analyzes research data using AI to extract insights, 
+ * identify patterns, and provide recommendations based on the specified focus area.
+ * The step will process available data from previous steps, such as extracted content 
+ * and fact-checked statements.
+ * 
+ * @param options - Configuration options for the analysis step
+ * @param options.focus - The focus area for analysis (e.g., 'market-trends', 'technical-details')
+ * @param options.llm - Language model to use (falls back to state.defaultLLM if not provided)
+ * @param options.temperature - Temperature setting for the LLM (default: 0.3)
+ * @param options.depth - Depth of analysis: 'basic', 'detailed', or 'comprehensive' (default: 'detailed')
+ * @param options.includeEvidence - Whether to include supporting evidence (default: true)
+ * @param options.includeRecommendations - Whether to include recommendations (default: true)
+ * @param options.includeInResults - Whether to include analysis in final results (default: true)
+ * @param options.allowEmptyContent - Whether to proceed if no content is available (default: false)
+ * @param options.maxContentSize - Maximum content size in characters (default: 10000)
+ * 
+ * @returns A configured analysis step for the research pipeline
+ * 
+ * @example
+ * ```typescript
+ * import { research, analyze } from '@plust/datasleuth';
+ * import { openai } from '@ai-sdk/openai';
+ * 
+ * const results = await research({
+ *   query: "Impact of AI on healthcare",
+ *   steps: [
+ *     // Other steps...
+ *     analyze({
+ *       focus: 'ethical-considerations',
+ *       llm: openai('gpt-4o'),
+ *       depth: 'comprehensive',
+ *       includeRecommendations: true
+ *     })
+ *   ],
+ *   outputSchema: outputSchema
+ * });
+ * ```
  */
 export function analyze(options: AnalyzeOptions): ReturnType<typeof createStep> {
   return createStep(

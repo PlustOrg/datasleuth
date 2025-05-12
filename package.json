@@ -23,7 +23,9 @@
     "example:advanced": "ts-node examples/advanced-research.ts",
     "example:orchestration": "ts-node examples/orchestration-research.ts",
     "example:comprehensive": "ts-node examples/comprehensive-research.ts",
-    "prepublishOnly": "npm run clean && npm run build"
+    "docs": "typedoc --entryPointStrategy expand --out docs/api src/index.ts",
+    "docs:watch": "typedoc --entryPointStrategy expand --out docs/api --watch src/index.ts",
+    "prepublishOnly": "npm run clean && npm run build && npm run docs"
   },
   "repository": {
     "type": "git",
@@ -63,6 +65,7 @@
     "rimraf": "^5.0.7",
     "ts-jest": "^29.3.2",
     "ts-node": "^10.9.2",
+    "typedoc": "^0.28.4",
     "typescript": "^5.8.3"
   },
   "jest": {
