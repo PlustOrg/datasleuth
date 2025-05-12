@@ -56,6 +56,17 @@ The data will include some or all of the following:
 Analyze this data and format it according to the requested output schema.
 Focus on accuracy, relevance, and maintaining the integrity of the information.
 Ensure all required fields in the schema are populated with appropriate content.
+
+IMPORTANT: Pay careful attention to nested objects and arrays in the schema.
+For each field in the schema:
+1. Ensure it has the correct type (string, number, array, object)
+2. For arrays of objects, ensure each object has all required properties
+3. For nested objects, ensure all required properties are present
+4. For 'url' fields, provide valid URLs starting with http:// or https://
+5. If you're unsure about specific content, provide reasonable placeholder values
+   that follow the schema structure
+
+Be thorough and aim for completeness rather than leaving fields undefined.
 `;
 
 /**
@@ -482,60 +493,91 @@ function prepareResearchDataForLLM(state: ResearchState): string {
  * Extracts schema information for the LLM prompt
  */
 function extractSchemaInfo(schema: z.ZodType): string {
-  // If it's a ZodObject, we can extract the shape
-  if (schema instanceof z.ZodObject) {
-    const shape = schema.shape as Record<string, z.ZodTypeAny>;
-    const schemaDescription: string[] = [];
+  // For recursive schema extraction
+  function extractRecursive(zodType: z.ZodTypeAny, indent: string = ''): string[] {
+    const descriptions: string[] = [];
 
-    for (const [key, zodType] of Object.entries(shape)) {
-      const isRequired = !zodType.isOptional();
-      let typeInfo = 'unknown';
-      let description = '';
+    // Handle different Zod types
+    if (zodType instanceof z.ZodObject) {
+      const shape = zodType.shape as Record<string, z.ZodTypeAny>;
 
-      // String
-      if (zodType instanceof z.ZodString) {
-        typeInfo = 'string';
-      }
-      // Number
-      else if (zodType instanceof z.ZodNumber) {
-        typeInfo = 'number';
-      }
-      // Boolean
-      else if (zodType instanceof z.ZodBoolean) {
-        typeInfo = 'boolean';
-      }
-      // Array
-      else if (zodType instanceof z.ZodArray) {
-        const innerType = zodType._def.type;
-        if (innerType instanceof z.ZodString) {
-          typeInfo = 'array of strings';
-        } else if (innerType instanceof z.ZodNumber) {
-          typeInfo = 'array of numbers';
-        } else if (innerType instanceof z.ZodObject) {
-          typeInfo = 'array of objects';
+      for (const [key, subType] of Object.entries(shape)) {
+        const isRequired = !subType.isOptional();
+        let typeDesc: string;
+        let description = '';
+
+        // Extract description if available
+        if ('description' in subType._def && subType._def.description) {
+          description = subType._def.description;
+        }
+
+        // Handle nested objects
+        if (subType instanceof z.ZodObject) {
+          descriptions.push(
+            `${indent}${key}: object${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+          );
+          const nestedDescriptions = extractRecursive(subType, `${indent}  `);
+          descriptions.push(...nestedDescriptions);
+        }
+        // Handle arrays
+        else if (subType instanceof z.ZodArray) {
+          const innerType = subType._def.type;
+
+          if (innerType instanceof z.ZodObject) {
+            descriptions.push(
+              `${indent}${key}: array of objects${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+            );
+            descriptions.push(`${indent}  Each item should have:`);
+            const nestedDescriptions = extractRecursive(innerType, `${indent}    `);
+            descriptions.push(...nestedDescriptions);
+          } else if (innerType instanceof z.ZodString) {
+            const format = innerType._def.checks?.find((check) => check.kind === 'url')
+              ? ' (URLs)'
+              : '';
+            descriptions.push(
+              `${indent}${key}: array of strings${format}${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+            );
+          } else if (innerType instanceof z.ZodNumber) {
+            descriptions.push(
+              `${indent}${key}: array of numbers${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+            );
+          } else {
+            descriptions.push(
+              `${indent}${key}: array${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+            );
+          }
+        }
+        // Handle primitives
+        else if (subType instanceof z.ZodString) {
+          const format = subType._def.checks?.find((check) => check.kind === 'url') ? ' (URL)' : '';
+          descriptions.push(
+            `${indent}${key}: string${format}${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+          );
+        } else if (subType instanceof z.ZodNumber) {
+          descriptions.push(
+            `${indent}${key}: number${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+          );
+        } else if (subType instanceof z.ZodBoolean) {
+          descriptions.push(
+            `${indent}${key}: boolean${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+          );
         } else {
-          typeInfo = 'array';
+          descriptions.push(
+            `${indent}${key}: unknown type${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
+          );
         }
       }
-      // Object
-      else if (zodType instanceof z.ZodObject) {
-        typeInfo = 'object';
-      }
-
-      // Extract description if available
-      if ('description' in zodType._def && zodType._def.description) {
-        description = zodType._def.description;
-      }
-
-      schemaDescription.push(
-        `${key}: ${typeInfo}${isRequired ? ' (required)' : ' (optional)'}${description ? ` - ${description}` : ''}`
-      );
     }
 
-    return schemaDescription.join('\n');
+    return descriptions;
   }
 
-  // Fallback for non-object schemas or if we can't extract
+  // Start extraction from the root schema
+  if (schema instanceof z.ZodObject) {
+    return extractRecursive(schema).join('\n');
+  }
+
+  // Fallback for non-object schemas
   return 'Schema details not available. Please organize data in a structured format.';
 }
 
@@ -588,33 +630,261 @@ function buildTransformedOutput(state: ResearchState, schema: z.ZodType): Record
 
 /**
  * Attempt to fix missing fields with sensible defaults
+ * Handles nested objects and arrays recursively
  */
 function fixMissingFields(
   result: Record<string, any>,
   error: z.ZodError,
   state: ResearchState
 ): Record<string, any> {
-  const fixed = { ...result };
+  const fixed = JSON.parse(JSON.stringify(result)); // Deep clone to avoid mutations
+  const fixedPaths = new Set<string>(); // Track fixed paths to avoid redundant fixes
 
-  // Process each error
+  // Group errors by path for efficient processing
+  const errorsByPath = error.errors.reduce(
+    (acc, issue) => {
+      const path = issue.path.join('.');
+      if (!acc[path]) {
+        acc[path] = [];
+      }
+      acc[path].push(issue);
+      return acc;
+    },
+    {} as Record<string, typeof error.errors>
+  );
+
+  // Process each error path
+  for (const [pathStr, issues] of Object.entries(errorsByPath)) {
+    if (fixedPaths.has(pathStr)) continue;
+
+    const path = pathStr.split('.');
+    const issue = issues[0]; // Take the first issue for this path
+
+    // Create any missing parent objects in the path
+    ensurePathExists(fixed, path);
+
+    // Handle different error codes
+    if (issue.code === 'invalid_type') {
+      const { expected } = issue as { expected: string };
+
+      if (expected === 'string') {
+        setValueAtPath(fixed, path, getDefaultString(path));
+      } else if (expected === 'number') {
+        setValueAtPath(fixed, path, 0);
+      } else if (expected === 'boolean') {
+        setValueAtPath(fixed, path, false);
+      } else if (expected === 'array') {
+        // Create empty array and then populate based on schema expectations
+        const arrayValue = createDefaultArray(path, state);
+        setValueAtPath(fixed, path, arrayValue);
+      } else if (expected === 'object') {
+        // Create empty object and then fix nested fields
+        setValueAtPath(fixed, path, {});
+      }
+    }
+
+    fixedPaths.add(pathStr);
+  }
+
+  // Second pass to handle nested errors in arrays and objects after parent structures exist
   for (const issue of error.errors) {
-    const path = issue.path.join('.');
+    const path = issue.path;
 
-    // Handle common missing fields
-    if (path === 'summary' && !fixed.summary) {
-      fixed.summary = 'No summary available';
-    }
+    // Handle array items specially - they often have numeric indices in the path
+    if (path.length >= 2 && typeof path[path.length - 2] === 'number') {
+      const parentPath = path.slice(0, path.length - 1);
+      const parentPathStr = parentPath.join('.');
 
-    if (path === 'keyFindings' && !fixed.keyFindings) {
-      fixed.keyFindings = ['No key findings available'];
-    }
-
-    if (path === 'sources' && !fixed.sources) {
-      fixed.sources = ['https://example.com/not-available'];
+      if (!fixedPaths.has(parentPathStr)) {
+        // Try to fix the array item by creating appropriate objects
+        const arrayItemValue = getValueAtPath(fixed, parentPath);
+        if (arrayItemValue === undefined) {
+          setValueAtPath(fixed, parentPath, {});
+          fixedPaths.add(parentPathStr);
+        }
+      }
     }
   }
 
   return fixed;
+}
+
+/**
+ * Ensures a path exists in an object by creating any missing objects along the way
+ */
+function ensurePathExists(obj: any, path: Array<string | number>): void {
+  let current = obj;
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i];
+
+    // Handle array indices
+    if (typeof key === 'number' || /^\d+$/.test(key as string)) {
+      const index = typeof key === 'number' ? key : parseInt(key as string);
+      if (!Array.isArray(current[path[i - 1]])) {
+        current[path[i - 1]] = [];
+      }
+      if (current[path[i - 1]][index] === undefined) {
+        current[path[i - 1]][index] = {};
+      }
+      current = current[path[i - 1]][index];
+    }
+    // Handle regular object properties
+    else {
+      if (current[key] === undefined) {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+  }
+}
+
+/**
+ * Sets a value at a specified path in an object
+ */
+function setValueAtPath(obj: any, path: Array<string | number>, value: any): void {
+  let current = obj;
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i];
+
+    // Handle array indices
+    if (typeof key === 'number' || /^\d+$/.test(key as string)) {
+      const index = typeof key === 'number' ? key : parseInt(key as string);
+      if (!Array.isArray(current[path[i - 1]])) {
+        current[path[i - 1]] = [];
+      }
+      if (current[path[i - 1]][index] === undefined) {
+        current[path[i - 1]][index] = {};
+      }
+      current = current[path[i - 1]][index];
+    }
+    // Handle regular object properties
+    else {
+      if (current[key] === undefined) {
+        // Create array if next part is a number, otherwise object
+        const nextKey = path[i + 1];
+        current[key] = typeof nextKey === 'number' || /^\d+$/.test(nextKey as string) ? [] : {};
+      }
+      current = current[key];
+    }
+  }
+
+  // Set the value at the final key
+  const lastKey = path[path.length - 1];
+  current[lastKey] = value;
+}
+
+/**
+ * Gets a value at a specified path in an object
+ */
+function getValueAtPath(obj: any, path: Array<string | number>): any {
+  let current = obj;
+
+  for (const key of path) {
+    if (current === undefined || current === null) {
+      return undefined;
+    }
+
+    current = current[key];
+  }
+
+  return current;
+}
+
+/**
+ * Generate a default string based on the field name/path
+ */
+function getDefaultString(path: Array<string | number>): string {
+  const lastKey = path[path.length - 1];
+
+  // Special handling for common field names
+  if (lastKey === 'title' || lastKey === 'name') {
+    return 'Untitled';
+  } else if (lastKey === 'summary' || lastKey === 'description') {
+    return 'No information available';
+  } else if (lastKey === 'url' || lastKey === 'link') {
+    return 'https://example.com/placeholder';
+  } else if (lastKey === 'approach') {
+    return 'General approach';
+  } else if (lastKey === 'relevance') {
+    return 'General reference';
+  } else if (lastKey === 'futurePerspectives') {
+    return 'Future possibilities require further research';
+  }
+
+  // Default value
+  return 'No data available';
+}
+
+/**
+ * Create a default array with appropriate items based on context
+ */
+function createDefaultArray(path: Array<string | number>, state: ResearchState): any[] {
+  const lastKey = path[path.length - 1];
+
+  // Handle specific array field names with appropriate defaults
+  if (lastKey === 'keyFindings' || lastKey === 'findings') {
+    return ['Key finding information not available'];
+  } else if (lastKey === 'challenges') {
+    return ['Challenge information not available'];
+  } else if (lastKey === 'innovations') {
+    return ['Innovation information not available'];
+  } else if (lastKey === 'strengths') {
+    return ['Strength information not available'];
+  } else if (lastKey === 'weaknesses') {
+    return ['Weakness information not available'];
+  } else if (lastKey === 'sources') {
+    // Try to extract sources from state
+    if (state.data.extractedContent && state.data.extractedContent.length > 0) {
+      return state.data.extractedContent.slice(0, 3).map((content) => ({
+        url: content.url,
+        title: content.title || 'Unknown source',
+        relevance: 'General reference',
+      }));
+    } else if (state.data.searchResults && state.data.searchResults.length > 0) {
+      return state.data.searchResults.slice(0, 3).map((result) => ({
+        url: result.url,
+        title: result.title || 'Unknown source',
+        relevance: 'General reference',
+      }));
+    }
+
+    // Fallback if no sources available
+    return [
+      {
+        url: 'https://example.com/source1',
+        title: 'Example Source 1',
+        relevance: 'General reference',
+      },
+      {
+        url: 'https://example.com/source2',
+        title: 'Example Source 2',
+        relevance: 'General reference',
+      },
+    ];
+  } else if (lastKey === 'comparativeAnalysis') {
+    return [
+      {
+        approach: 'Approach 1',
+        strengths: ['Strength information not available'],
+        weaknesses: ['Weakness information not available'],
+      },
+      {
+        approach: 'Approach 2',
+        strengths: ['Strength information not available'],
+        weaknesses: ['Weakness information not available'],
+      },
+      {
+        approach: 'Approach 3',
+        strengths: ['Strength information not available'],
+        weaknesses: ['Weakness information not available'],
+      },
+    ];
+  }
+
+  // Default empty array for unknown fields
+  return ['No information available'];
 }
 
 /**
