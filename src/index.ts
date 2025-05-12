@@ -45,6 +45,7 @@ export { analyze } from './steps/analyze.js';
 export { track } from './steps/track.js';
 export { parallel, defaultMergeFunction } from './steps/parallel.js';
 export { classify } from './steps/classify.js';
+export { transform } from './steps/transform.js';
 
 // Utilities
 export { ResultMerger } from './utils/merge.js';
@@ -87,3 +88,4 @@ export type {
   EntityCluster as Cluster,
   ClassificationData as ClassificationResult,
 } from './steps/classify.js';
+export type { TransformOptions } from './steps/transform.js';

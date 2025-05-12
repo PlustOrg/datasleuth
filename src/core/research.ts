@@ -12,6 +12,7 @@ import { searchWeb } from '../steps/searchWeb.js';
 import { extractContent } from '../steps/extractContent.js';
 import { factCheck } from '../steps/factCheck.js';
 import { summarize } from '../steps/summarize.js';
+import { transform } from '../steps/transform.js';
 import {
   BaseResearchError,
   ConfigurationError,
@@ -159,7 +160,11 @@ export async function research(input: ResearchInput): Promise<ResearchResult> {
     }
 
     // If no steps provided, add default steps
-    const pipelineSteps = steps.length > 0 ? steps : getDefaultSteps(query);
+    let pipelineSteps = steps.length > 0 ? steps : getDefaultSteps(query);
+
+    // Always add the transform step as the last step in the pipeline
+    // to ensure output matches the expected schema
+    pipelineSteps = [...pipelineSteps, transform()];
 
     // Test environment handling - for tests allow running without an LLM
     // and provide mock results when using default steps
