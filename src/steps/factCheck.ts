@@ -24,7 +24,7 @@ const factCheckResultSchema = z.object({
   isValid: z.boolean(),
   confidence: z.number().min(0).max(1),
   evidence: z.array(z.string()).optional(),
-  sources: z.array(z.string().url()).optional(),
+  sources: z.array(z.string()).optional(), // Changed from z.string().url() to z.string()
   corrections: z.string().optional(),
 });
 
