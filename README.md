@@ -1,9 +1,11 @@
 # @plust/datasleuth
 
-A powerful deep research tool for gathering and synthesizing information with
-AI. This package enables developers to perform comprehensive research on any
-topic with a simple functional API, returning structured results based on a
-specified schema.
+Build LLM-powered research pipelines and output structured data.
+
+DataSleuth is a modular AI-powered research engine that transforms natural
+language queries into structured, validated data. It orchestrates information
+gathering, fact checking, analysis, and synthesis using customizable pipelines
+and LLM integration to deliver research results in your specified format.
 
 ![npm version](https://img.shields.io/npm/v/@plust/datasleuth)
 ![license](https://img.shields.io/npm/l/@plust/datasleuth)

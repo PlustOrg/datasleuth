@@ -1,7 +1,7 @@
 {
   "name": "@plust/datasleuth",
   "version": "0.1.9",
-  "description": "Deep research tool for gathering and synthesizing information with AI",
+  "description": "Build LLM-powered research pipelines and output structured data.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
