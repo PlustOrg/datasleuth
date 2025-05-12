@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+coverage/
+docs/api/
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Testing
+test-output.json
+coverage-output.json
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Editors and IDEs
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.bak
+.cache/
+
+# npm
+.npm
+.npmrc.private
+*.tgz
+
+# GitHub specific files
+.github/copilot-instructions.md
+.github/CODEOWNERS
+.github/FUNDING.yml
+
+# Git history maintenance
+.git-backup/

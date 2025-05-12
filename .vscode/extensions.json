@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "ms-vscode.vscode-typescript-next",
+    "streetsidesoftware.code-spell-checker",
+    "christian-kohler.path-intellisense",
+    "ms-vscode.js-debug",
+    "orta.vscode-jest",
+    "mikestead.dotenv",
+    "yzhang.markdown-all-in-one",
+    "davidanson.vscode-markdownlint"
+  ]
+}

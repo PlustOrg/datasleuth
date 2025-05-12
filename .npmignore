@@ -1,0 +1,41 @@
+# Development files
+src/
+tests/
+examples/
+coverage/
+.vscode/
+.github/
+.git/
+.editorconfig
+.eslintrc*
+.prettierrc*
+*.tsbuildinfo
+test-output.json
+coverage-output.json
+
+# CI/CD
+.travis.yml
+.circleci/
+.github/
+
+# Documentation sources (built docs are included)
+docs/
+
+# Misc
+.DS_Store
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Config files
+jest.config.*
+tsconfig*.json
+typedoc.json
+.nvmrc
+.npmrc
+eslint.config.js
+
+# Keep the built API documentation
+!docs/api/**
