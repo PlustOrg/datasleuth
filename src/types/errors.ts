@@ -1,4 +1,4 @@
-import { ErrorCode } from './errorCodes';
+import { ErrorCode } from './errorCodes.js';
 
 /**
  * Base Research Error interface implemented by all specialized error classes
@@ -41,7 +41,7 @@ export class BaseResearchError extends Error implements ResearchError {
     this.details = options.details;
     this.retry = options.retry ?? false;
     this.suggestions = options.suggestions ?? [];
-    
+
     // Maintain proper stack traces for where our error was thrown
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
@@ -53,15 +53,15 @@ export class BaseResearchError extends Error implements ResearchError {
    */
   getFormattedMessage(): string {
     let message = `[${this.code}] ${this.message}`;
-    
+
     if (this.step) {
       message = `[Step: ${this.step}] ${message}`;
     }
-    
+
     if (this.suggestions && this.suggestions.length > 0) {
-      message += `\nSuggestions:\n${this.suggestions.map(s => `- ${s}`).join('\n')}`;
+      message += `\nSuggestions:\n${this.suggestions.map((s) => `- ${s}`).join('\n')}`;
     }
-    
+
     return message;
   }
 }
@@ -90,7 +90,9 @@ export class ValidationError extends BaseResearchError {
  * Error thrown when network operations fail
  */
 export class NetworkError extends BaseResearchError {
-  constructor(options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & { retry?: boolean }) {
+  constructor(
+    options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & { retry?: boolean }
+  ) {
     super({ ...options, code: 'network_error', retry: options.retry ?? true });
     this.name = 'NetworkError';
   }
@@ -100,18 +102,20 @@ export class NetworkError extends BaseResearchError {
  * Error thrown when external API calls fail
  */
 export class ApiError extends BaseResearchError {
-  constructor(options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & { 
-    retry?: boolean;
-    statusCode?: number;
-  }) {
-    super({ 
-      ...options, 
-      code: 'api_error', 
+  constructor(
+    options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & {
+      retry?: boolean;
+      statusCode?: number;
+    }
+  ) {
+    super({
+      ...options,
+      code: 'api_error',
       retry: options.retry ?? false,
-      details: { 
+      details: {
         ...options.details,
-        statusCode: options.statusCode 
-      }
+        statusCode: options.statusCode,
+      },
     });
     this.name = 'ApiError';
   }
@@ -121,7 +125,9 @@ export class ApiError extends BaseResearchError {
  * Error thrown when LLM operations fail
  */
 export class LLMError extends BaseResearchError {
-  constructor(options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & { retry?: boolean }) {
+  constructor(
+    options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & { retry?: boolean }
+  ) {
     super({ ...options, code: 'llm_error', retry: options.retry ?? true });
     this.name = 'LLMError';
   }
@@ -131,7 +137,9 @@ export class LLMError extends BaseResearchError {
  * Error thrown when search operations fail
  */
 export class SearchError extends BaseResearchError {
-  constructor(options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & { retry?: boolean }) {
+  constructor(
+    options: Omit<ConstructorParameters<typeof BaseResearchError>[0], 'code'> & { retry?: boolean }
+  ) {
     super({ ...options, code: 'search_error', retry: options.retry ?? true });
     this.name = 'SearchError';
   }
@@ -191,11 +199,7 @@ export class MaxIterationsError extends BaseResearchError {
  * Type guard to check if an error is a ResearchError
  */
 export function isResearchError(error: unknown): error is ResearchError {
-  return (
-    error instanceof Error &&
-    'code' in error &&
-    typeof (error as any).code === 'string'
-  );
+  return error instanceof Error && 'code' in error && typeof (error as any).code === 'string';
 }
 
 /**

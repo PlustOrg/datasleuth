@@ -2,15 +2,11 @@
  * Research track implementation for parallel research paths
  * A track represents a distinct research path that can run in parallel with others
  */
-import { createStep } from '../utils/steps';
-import { ResearchState, ResearchStep } from '../types/pipeline';
+import { createStep } from '../utils/steps.js';
+import { ResearchState, ResearchStep } from '../types/pipeline.js';
 import { z } from 'zod';
-import { 
-  ValidationError, 
-  ConfigurationError,  
-  ProcessingError 
-} from '../types/errors';
-import { logger, createStepLogger } from '../utils/logging';
+import { ValidationError, ConfigurationError, ProcessingError } from '../types/errors.js';
+import { logger, createStepLogger } from '../utils/logging.js';
 
 /**
  * Options for creating a research track
@@ -45,14 +41,16 @@ export interface TrackOptions {
 const trackResultSchema = z.object({
   name: z.string(),
   results: z.array(z.any()),
-  data: z.record(z.any()),  // Changed from optional to required
+  data: z.record(z.any()), // Changed from optional to required
   metadata: z.record(z.any()).optional(),
-  errors: z.array(z.object({
-    message: z.string(),
-    step: z.string().optional(),
-    code: z.string().optional()
-  })),  // Removed optional here
-  completed: z.boolean()
+  errors: z.array(
+    z.object({
+      message: z.string(),
+      step: z.string().optional(),
+      code: z.string().optional(),
+    })
+  ), // Removed optional here
+  completed: z.boolean(),
 });
 
 export type TrackResult = z.infer<typeof trackResultSchema>;
@@ -65,46 +63,48 @@ async function executeTrackStep(
   options: TrackOptions
 ): Promise<ResearchState> {
   const stepLogger = createStepLogger('Track');
-  
+
   const {
     name,
     steps,
-    isolate = false, 
+    isolate = false,
     includeInResults = true,
     description,
     metadata = {},
     continueOnError = false,
-    retry = { maxRetries: 0, baseDelay: 1000 }
+    retry = { maxRetries: 0, baseDelay: 1000 },
   } = options;
-  
+
   // Validate required parameters
   if (!name) {
     throw new ValidationError({
-      message: "Track name is required",
+      message: 'Track name is required',
       step: 'Track',
       details: { options },
       suggestions: [
-        "Provide a unique name for each track",
-        "The name is used to identify the track in results and logs"
-      ]
+        'Provide a unique name for each track',
+        'The name is used to identify the track in results and logs',
+      ],
     });
   }
-  
+
   if (!steps || !Array.isArray(steps) || steps.length === 0) {
     throw new ValidationError({
-      message: "Track requires at least one step",
+      message: 'Track requires at least one step',
       step: 'Track',
       details: { options },
       suggestions: [
-        "Provide at least one step in the steps array",
-        "Steps should be created using factory functions like searchWeb(), analyze(), etc."
-      ]
+        'Provide at least one step in the steps array',
+        'Steps should be created using factory functions like searchWeb(), analyze(), etc.',
+      ],
     });
   }
-  
+
   stepLogger.info(`Starting research track: ${name}${description ? ` (${description})` : ''}`);
-  stepLogger.debug(`Track configuration: isolate=${isolate}, continueOnError=${continueOnError}, steps=${steps.length}`);
-  
+  stepLogger.debug(
+    `Track configuration: isolate=${isolate}, continueOnError=${continueOnError}, steps=${steps.length}`
+  );
+
   // Create a local state for this track
   // If isolate is true, we start with a fresh data object
   // Otherwise, we use the existing state's data as a starting point
@@ -115,15 +115,15 @@ async function executeTrackStep(
       ...state.metadata,
       currentTrack: name,
       trackDescription: description,
-      ...metadata
+      ...metadata,
     },
     results: [],
-    errors: []
+    errors: [],
   };
-  
+
   // Execute all steps in the track
   let currentState = trackState;
-  
+
   try {
     for (const step of steps) {
       try {
@@ -134,66 +134,70 @@ async function executeTrackStep(
             step: 'Track',
             details: { invalidStep: step },
             suggestions: [
-              "Ensure all steps are created using factory functions like searchWeb(), analyze(), etc.",
-              "Check for undefined or null values in the steps array"
-            ]
+              'Ensure all steps are created using factory functions like searchWeb(), analyze(), etc.',
+              'Check for undefined or null values in the steps array',
+            ],
           });
         }
-        
+
         stepLogger.debug(`Executing step "${step.name}" in track "${name}"`);
-        
+
         // Update current step in metadata
         currentState = {
           ...currentState,
           metadata: {
             ...currentState.metadata,
-            currentStep: step.name
-          }
+            currentStep: step.name,
+          },
         };
-        
+
         // Execute the step
         currentState = await step.execute(currentState);
-        
+
         stepLogger.debug(`Step "${step.name}" completed successfully in track "${name}"`);
       } catch (stepError: unknown) {
-        stepLogger.error(`Error in step "${step.name}" of track "${name}": ${stepError instanceof Error ? stepError.message : String(stepError)}`);
-        
+        stepLogger.error(
+          `Error in step "${step.name}" of track "${name}": ${stepError instanceof Error ? stepError.message : String(stepError)}`
+        );
+
         // Add error to current state
         const errorMessage = stepError instanceof Error ? stepError.message : String(stepError);
         const errorStep = currentState.metadata.currentStep || step.name || 'unknown';
-        
+
         currentState = {
           ...currentState,
           errors: [
             ...currentState.errors,
-            stepError instanceof Error ? stepError : new Error(errorMessage)
-          ]
+            stepError instanceof Error ? stepError : new Error(errorMessage),
+          ],
         };
-        
+
         // If continueOnError is false, throw to exit the track
         if (!continueOnError) {
           throw new ProcessingError({
             message: `Track "${name}" failed at step "${errorStep}": ${errorMessage}`,
             step: 'Track',
-            details: { 
-              trackName: name, 
-              failedStep: errorStep, 
-              originalError: stepError 
+            details: {
+              trackName: name,
+              failedStep: errorStep,
+              originalError: stepError,
             },
             retry: false,
             suggestions: [
-              "Set continueOnError to true if you want the track to continue despite failures",
-              "Check the specific step configuration for issues",
-              "Examine the original error for more details on the failure"
-            ]
+              'Set continueOnError to true if you want the track to continue despite failures',
+              'Check the specific step configuration for issues',
+              'Examine the original error for more details on the failure',
+            ],
           });
         }
-        
+
         // Otherwise log and continue
-        stepLogger.warn(`Continuing track "${name}" after error in step "${errorStep}" due to continueOnError=true`);
+        stepLogger.warn(
+          `Continuing track "${name}" after error in step "${errorStep}" due to continueOnError=true`
+        );
       }
     }
-    
+
     // Create the track result
     const trackResult: TrackResult = {
       name,
@@ -204,18 +208,23 @@ async function executeTrackStep(
         description,
         completedAt: new Date().toISOString(),
         hasErrors: currentState.errors.length > 0,
-        errorCount: currentState.errors.length
+        errorCount: currentState.errors.length,
       },
-      errors: currentState.errors.map(err => ({
+      errors: currentState.errors.map((err) => ({
         message: err instanceof Error ? err.message : String(err),
-        step: err instanceof Error && 'step' in err ? (err as any).step : currentState.metadata.currentStep || 'unknown',
-        code: err instanceof Error && 'code' in err ? (err as any).code : 'TRACK_STEP_ERROR'
+        step:
+          err instanceof Error && 'step' in err
+            ? (err as any).step
+            : currentState.metadata.currentStep || 'unknown',
+        code: err instanceof Error && 'code' in err ? (err as any).code : 'TRACK_STEP_ERROR',
       })),
-      completed: currentState.errors.length === 0 // Changed this line - If there are errors, the track is not completed
+      completed: currentState.errors.length === 0, // Changed this line - If there are errors, the track is not completed
     };
-    
-    stepLogger.info(`Track "${name}" completed${trackResult.errors.length > 0 ? ` with ${trackResult.errors.length} errors` : ' successfully'}`);
-    
+
+    stepLogger.info(
+      `Track "${name}" completed${trackResult.errors.length > 0 ? ` with ${trackResult.errors.length} errors` : ' successfully'}`
+    );
+
     // If this track should be included in results, add it to the state results
     if (includeInResults) {
       // Create combined state - if not isolate, merge track data with parent state
@@ -226,13 +235,10 @@ async function executeTrackStep(
             ...currentState.data, // Use currentState.data instead of state.data to preserve track changes
             tracks: {
               ...(state.data.tracks || {}),
-              [name]: trackResult
-            }
+              [name]: trackResult,
+            },
           },
-          results: [
-            ...state.results,
-            { track: trackResult }
-          ]
+          results: [...state.results, { track: trackResult }],
         };
       } else {
         // If isolated, don't merge data but just add track to tracks
@@ -242,13 +248,10 @@ async function executeTrackStep(
             ...state.data,
             tracks: {
               ...(state.data.tracks || {}),
-              [name]: trackResult
-            }
+              [name]: trackResult,
+            },
           },
-          results: [
-            ...state.results,
-            { track: trackResult }
-          ]
+          results: [...state.results, { track: trackResult }],
         };
       }
     } else {
@@ -260,9 +263,9 @@ async function executeTrackStep(
             ...currentState.data, // Use currentState.data to preserve track changes
             tracks: {
               ...(state.data.tracks || {}),
-              [name]: trackResult
-            }
-          }
+              [name]: trackResult,
+            },
+          },
         };
       } else {
         return {
@@ -271,16 +274,16 @@ async function executeTrackStep(
             ...state.data,
             tracks: {
               ...(state.data.tracks || {}),
-              [name]: trackResult
-            }
-          }
+              [name]: trackResult,
+            },
+          },
         };
       }
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     stepLogger.error(`Track "${name}" failed: ${errorMessage}`);
-    
+
     // Create an error track result
     const trackResult: TrackResult = {
       name,
@@ -291,41 +294,45 @@ async function executeTrackStep(
         description,
         error: errorMessage,
         failedAt: new Date().toISOString(),
-        failedStep: currentState.metadata.currentStep || 'unknown'
+        failedStep: currentState.metadata.currentStep || 'unknown',
       },
       errors: [
         ...currentState.errors,
         {
           message: errorMessage,
           step: currentState.metadata.currentStep || 'unknown',
-          code: error instanceof Error && 'code' in error ? (error as any).code : 'TRACK_EXECUTION_ERROR'
-        }
+          code:
+            error instanceof Error && 'code' in error
+              ? (error as any).code
+              : 'TRACK_EXECUTION_ERROR',
+        },
       ],
-      completed: false
+      completed: false,
     };
-    
+
     // If error is already a properly formatted error, just rethrow after adding track to state
     // Otherwise wrap in ProcessingError
-    const errorToThrow = error instanceof ValidationError || 
-                         error instanceof ConfigurationError || 
-                         error instanceof ProcessingError
-      ? error
-      : new ProcessingError({
-          message: `Track "${name}" execution failed: ${errorMessage}`,
-          step: 'Track',
-          details: { 
-            trackName: name, 
-            failedStep: currentState.metadata.currentStep || 'unknown',
-            originalError: error
-          },
-          retry: false,
-          suggestions: [
-            "Check the configuration of the steps in the track",
-            "Look at the specific error in the track result for more details",
-            "Consider setting continueOnError=true to complete partial results"
-          ]
-        });
-    
+    const errorToThrow =
+      error instanceof ValidationError ||
+      error instanceof ConfigurationError ||
+      error instanceof ProcessingError
+        ? error
+        : new ProcessingError({
+            message: `Track "${name}" execution failed: ${errorMessage}`,
+            step: 'Track',
+            details: {
+              trackName: name,
+              failedStep: currentState.metadata.currentStep || 'unknown',
+              originalError: error,
+            },
+            retry: false,
+            suggestions: [
+              'Check the configuration of the steps in the track',
+              'Look at the specific error in the track result for more details',
+              'Consider setting continueOnError=true to complete partial results',
+            ],
+          });
+
     // Add the failed track to state data before throwing
     const updatedState = {
       ...state,
@@ -333,18 +340,17 @@ async function executeTrackStep(
         ...state.data,
         tracks: {
           ...(state.data.tracks || {}),
-          [name]: trackResult
-        }
+          [name]: trackResult,
+        },
       },
       // If we're including in results, add the failed track result
-      ...(includeInResults ? {
-        results: [
-          ...state.results,
-          { track: trackResult }
-        ]
-      } : {})
+      ...(includeInResults
+        ? {
+            results: [...state.results, { track: trackResult }],
+          }
+        : {}),
     };
-    
+
     // If retry is enabled at the track level, we'll log but return the state
     // This allows the parent (usually parallel step) to handle retry
     if (retry.maxRetries && retry.maxRetries > 0) {
@@ -352,11 +358,11 @@ async function executeTrackStep(
       updatedState.metadata = {
         ...updatedState.metadata,
         retryTrack: name,
-        retryError: errorMessage
+        retryError: errorMessage,
       };
       return updatedState;
     }
-    
+
     // Otherwise throw to allow higher-level retry mechanisms to handle it
     throw errorToThrow;
   }
@@ -364,16 +370,17 @@ async function executeTrackStep(
 
 /**
  * Creates a track step for the research pipeline
- * 
+ *
  * @param options Options for the research track
  * @returns A track step for the research pipeline
  */
 export function track(options: TrackOptions): ReturnType<typeof createStep> {
-  return createStep('Track', 
+  return createStep(
+    'Track',
     // Wrapper function that matches the expected signature
     async (state: ResearchState, opts?: Record<string, any>) => {
       return executeTrackStep(state, options);
-    }, 
+    },
     options,
     {
       // Mark as retryable if retry options are provided
@@ -382,7 +389,7 @@ export function track(options: TrackOptions): ReturnType<typeof createStep> {
       retryDelay: options.retry?.baseDelay || 1000,
       backoffFactor: 2,
       // Track is a super-step that's always required
-      optional: false
+      optional: false,
     }
   );
 }

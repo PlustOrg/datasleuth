@@ -1,33 +1,29 @@
 /**
  * Analysis step for the research pipeline
- * 
+ *
  * This module provides specialized analysis functionality for examining collected
- * research data. It uses AI to extract insights, patterns, and implications based on 
- * a specified focus area. The analyzer can process various types of data including 
+ * research data. It uses AI to extract insights, patterns, and implications based on
+ * a specified focus area. The analyzer can process various types of data including
  * search results, extracted content, and previous analysis.
- * 
+ *
  * @module steps/analyze
  * @category Steps
  */
 import * as mastra from 'mastra';
-import { createStep } from '../utils/steps';
-import { ResearchState } from '../types/pipeline';
+import { createStep } from '../utils/steps.js';
+import { ResearchState } from '../types/pipeline.js';
 import { z } from 'zod';
 import { generateText, generateObject, LanguageModel } from 'ai';
-import { 
-  ValidationError, 
-  LLMError, 
-  ConfigurationError 
-} from '../types/errors';
-import { logger, createStepLogger } from '../utils/logging';
-import { executeWithRetry } from '../utils/retry';
+import { ValidationError, LLMError, ConfigurationError } from '../types/errors.js';
+import { logger, createStepLogger } from '../utils/logging.js';
+import { executeWithRetry } from '../utils/retry.js';
 
 /**
  * Schema for analysis results
- * 
+ *
  * Defines the structure for analysis output, including insights, confidence score,
  * supporting evidence, and recommendations.
- * 
+ *
  * @private
  */
 const analysisResultSchema = z.object({
@@ -75,7 +71,7 @@ export interface AnalyzeOptions {
 }
 
 /**
- * Default analysis prompt template 
+ * Default analysis prompt template
  */
 const DEFAULT_ANALYSIS_PROMPT = `
 You are an expert analyst focused on {focus}. Your task is to analyze the provided information
@@ -98,7 +94,7 @@ async function executeAnalyzeStep(
   options: AnalyzeOptions
 ): Promise<ResearchState> {
   const stepLogger = createStepLogger('Analyze');
-  
+
   const {
     focus,
     llm,
@@ -110,31 +106,33 @@ async function executeAnalyzeStep(
     customPrompt,
     allowEmptyContent = false,
     maxContentSize = 10000, // Default max content size to prevent token limit issues
-    retry = { maxRetries: 2, baseDelay: 1000 }
+    retry = { maxRetries: 2, baseDelay: 1000 },
   } = options;
 
   stepLogger.info(`Starting analysis with focus: ${focus}, depth: ${depth}`);
-  
+
   try {
     // Get relevant content for analysis
     let contentToAnalyze: string[] = [];
-    
+
     // Add extracted content if available
     if (state.data.extractedContent) {
-      stepLogger.debug(`Adding ${state.data.extractedContent.length} extracted content items to analysis`);
+      stepLogger.debug(
+        `Adding ${state.data.extractedContent.length} extracted content items to analysis`
+      );
       contentToAnalyze.push(...state.data.extractedContent.map((item: any) => item.content));
     }
-    
+
     // Add factual information if available (only valid facts)
     if (state.data.factChecks) {
       const validFactChecks = state.data.factChecks.filter((check: any) => check.isValid);
       stepLogger.debug(`Adding ${validFactChecks.length} validated fact statements to analysis`);
       contentToAnalyze.push(...validFactChecks.map((check: any) => check.statement));
     }
-    
+
     if (contentToAnalyze.length === 0) {
       stepLogger.warn('No content found for analysis');
-      
+
       if (!allowEmptyContent) {
         throw new ValidationError({
           message: 'No content available for analysis',
@@ -142,49 +140,51 @@ async function executeAnalyzeStep(
           details: {
             hasExtractedContent: !!state.data.extractedContent,
             hasFactChecks: !!state.data.factChecks,
-            focus
+            focus,
           },
           suggestions: [
-            "Ensure content extraction or fact checking steps run successfully before analysis",
+            'Ensure content extraction or fact checking steps run successfully before analysis',
             "Set 'allowEmptyContent' to true if this step should be optional",
-            "Provide explicit content to analyze via the research state"
-          ]
+            'Provide explicit content to analyze via the research state',
+          ],
         });
       }
-      
+
       // If empty content is allowed, return state unchanged
       return state;
     }
 
     // Check for an LLM to use - either from options or from state
     const modelToUse = llm || state.defaultLLM;
-    
+
     // If no LLM is available, throw an error
     if (!modelToUse) {
       throw new ConfigurationError({
-        message: "No language model provided for analysis step",
+        message: 'No language model provided for analysis step',
         step: 'Analyze',
         details: { focus, options },
         suggestions: [
           "Provide an LLM in the step options using the 'llm' parameter",
-          "Set a defaultLLM when initializing the research function",
-          "Example: research({ defaultLLM: openai('gpt-4'), ... })"
-        ]
+          'Set a defaultLLM when initializing the research function',
+          "Example: research({ defaultLLM: openai('gpt-4'), ... })",
+        ],
       });
     }
 
     const startTime = Date.now();
-    
+
     // Trim content if it exceeds the maximum size
     let totalContentSize = contentToAnalyze.join('\n\n').length;
     if (totalContentSize > maxContentSize) {
-      stepLogger.warn(`Content size (${totalContentSize} chars) exceeds maximum (${maxContentSize}), trimming content`);
-      
+      stepLogger.warn(
+        `Content size (${totalContentSize} chars) exceeds maximum (${maxContentSize}), trimming content`
+      );
+
       // Sort by importance (prioritize fact-checked content)
       // This is a simplified approach - in a real implementation you might use more sophisticated methods
       const trimmedContent: string[] = [];
       let currentSize = 0;
-      
+
       for (const content of contentToAnalyze) {
         const contentSize = content.length;
         if (currentSize + contentSize <= maxContentSize) {
@@ -192,16 +192,19 @@ async function executeAnalyzeStep(
           currentSize += contentSize + 2; // +2 for the newlines
         } else {
           const remainingSize = maxContentSize - currentSize;
-          if (remainingSize > 50) { // Only add if we can include a meaningful chunk
+          if (remainingSize > 50) {
+            // Only add if we can include a meaningful chunk
             trimmedContent.push(content.substring(0, remainingSize - 3) + '...');
           }
           break;
         }
       }
-      
+
       contentToAnalyze = trimmedContent;
       totalContentSize = contentToAnalyze.join('\n\n').length;
-      stepLogger.info(`Content trimmed to ${totalContentSize} chars (${contentToAnalyze.length} items)`);
+      stepLogger.info(
+        `Content trimmed to ${totalContentSize} chars (${contentToAnalyze.length} items)`
+      );
     }
 
     // Generate analysis using the provided LLM with retry logic
@@ -218,14 +221,16 @@ async function executeAnalyzeStep(
       retry,
       stepLogger
     );
-    
+
     const timeTaken = Date.now() - startTime;
-    stepLogger.info(`Analysis for focus "${focus}" completed in ${timeTaken}ms with confidence: ${analysisResult.confidence.toFixed(2)}`);
+    stepLogger.info(
+      `Analysis for focus "${focus}" completed in ${timeTaken}ms with confidence: ${analysisResult.confidence.toFixed(2)}`
+    );
     stepLogger.debug(`Generated ${analysisResult.insights.length} insights for focus "${focus}"`);
-    
+
     // Store the analysis in the appropriate format
     const focusKey = focus.replace(/\s+/g, '-').toLowerCase();
-    
+
     // Update state with analysis and metadata
     const newState = {
       ...state,
@@ -244,17 +249,14 @@ async function executeAnalyzeStep(
             insightsCount: analysisResult.insights.length,
             confidence: analysisResult.confidence,
             depth,
-            timestamp: new Date().toISOString()
-          }
-        }
+            timestamp: new Date().toISOString(),
+          },
+        },
       },
       metadata: {
         ...state.metadata,
-        confidenceScore: Math.max(
-          state.metadata.confidenceScore || 0,
-          analysisResult.confidence
-        )
-      }
+        confidenceScore: Math.max(state.metadata.confidenceScore || 0, analysisResult.confidence),
+      },
     };
 
     // Add to results if requested
@@ -263,13 +265,13 @@ async function executeAnalyzeStep(
         ...newState,
         results: [
           ...newState.results,
-          { 
-            analysis: { 
+          {
+            analysis: {
               [focusKey]: {
                 ...analysisResult,
-                metadata: newState.data.analysisMetadata[focusKey]
-              } 
-            } 
+                metadata: newState.data.analysisMetadata[focusKey],
+              },
+            },
           },
         ],
       };
@@ -278,29 +280,31 @@ async function executeAnalyzeStep(
     return newState;
   } catch (error: unknown) {
     // Handle specific error types
-    if (error instanceof ValidationError || 
-        error instanceof LLMError || 
-        error instanceof ConfigurationError) {
+    if (
+      error instanceof ValidationError ||
+      error instanceof LLMError ||
+      error instanceof ConfigurationError
+    ) {
       // These are already properly formatted errors, just throw them
       throw error;
     }
-    
+
     // Handle generic errors
     const errorMessage = error instanceof Error ? error.message : String(error);
     stepLogger.error(`Error during analysis execution: ${errorMessage}`);
-    
+
     // Check error patterns to create appropriate error types
     if (errorMessage.includes('JSON') || errorMessage.includes('parse')) {
       throw new LLMError({
         message: `Failed to parse LLM response as valid JSON during analysis: ${errorMessage}`,
-        step: 'Analyze', 
+        step: 'Analyze',
         details: { error, focus: options.focus },
         retry: true,
         suggestions: [
-          "Verify the prompt is properly constructed to elicit JSON",
-          "Try a different model that produces more reliable structured output",
-          "Consider simplifying the requested analysis"
-        ]
+          'Verify the prompt is properly constructed to elicit JSON',
+          'Try a different model that produces more reliable structured output',
+          'Consider simplifying the requested analysis',
+        ],
       });
     } else if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
       throw new LLMError({
@@ -309,10 +313,10 @@ async function executeAnalyzeStep(
         details: { error, focus: options.focus },
         retry: false,
         suggestions: [
-          "Reduce the maxContentSize option",
-          "Use a model with larger context window",
-          "Split analysis into multiple focused queries"
-        ]
+          'Reduce the maxContentSize option',
+          'Use a model with larger context window',
+          'Split analysis into multiple focused queries',
+        ],
       });
     } else if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
       throw new LLMError({
@@ -321,13 +325,13 @@ async function executeAnalyzeStep(
         details: { error, focus: options.focus },
         retry: true,
         suggestions: [
-          "Wait and try again later",
-          "Implement request throttling in your application",
-          "Consider using a different LLM provider or API key"
-        ]
+          'Wait and try again later',
+          'Implement request throttling in your application',
+          'Consider using a different LLM provider or API key',
+        ],
       });
     }
-    
+
     // Generic LLM error fallback
     throw new LLMError({
       message: `Error during analysis with LLM: ${errorMessage}`,
@@ -335,10 +339,10 @@ async function executeAnalyzeStep(
       details: { originalError: error, focus: options.focus },
       retry: true,
       suggestions: [
-        "Check your LLM configuration",
-        "Verify API key and model availability",
-        "The LLM service might be experiencing issues, try again later"
-      ]
+        'Check your LLM configuration',
+        'Verify API key and model availability',
+        'The LLM service might be experiencing issues, try again later',
+      ],
     });
   }
 }
@@ -361,19 +365,21 @@ async function generateAnalysisWithLLM(
 ): Promise<AnalysisResult> {
   // Use default logger if stepLogger not provided
   const logger = stepLogger || createStepLogger('Analyze');
-  
+
   return executeWithRetry(
     async () => {
       try {
         // Prepare the content to analyze
         const contentText = contentItems.join('\n\n');
-        logger.debug(`Preparing analysis for ${contentItems.length} content items (${contentText.length} chars)`);
-        
+        logger.debug(
+          `Preparing analysis for ${contentItems.length} content items (${contentText.length} chars)`
+        );
+
         // Create a system prompt by replacing placeholders in the template
         const systemPrompt = (customPrompt || DEFAULT_ANALYSIS_PROMPT)
           .replace('{focus}', focus)
           .replace('{depth}', depth);
-        
+
         // Generate the analysis using the AI SDK with generateObject
         const { object } = await generateObject({
           model: llm,
@@ -398,16 +404,16 @@ ${includeRecommendations ? 'Provide actionable recommendations based on your ana
         if (error instanceof ValidationError || error instanceof LLMError) {
           throw error;
         }
-        
+
         // Otherwise wrap in LLMError
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Error generating analysis with LLM: ${errorMessage}`);
-        
+
         throw new LLMError({
           message: `Failed to generate analysis: ${errorMessage}`,
           step: 'Analyze',
           details: { error, focus },
-          retry: true
+          retry: true,
         });
       }
     },
@@ -416,20 +422,22 @@ ${includeRecommendations ? 'Provide actionable recommendations based on your ana
       retryDelay: retry?.baseDelay ?? 1000,
       backoffFactor: 2,
       onRetry: (attempt, error, delay) => {
-        logger.warn(`Retry attempt ${attempt} for analysis: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
-      }
+        logger.warn(
+          `Retry attempt ${attempt} for analysis: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`
+        );
+      },
     }
   );
 }
 
 /**
  * Creates an analysis step for the research pipeline
- * 
- * This function creates a step that analyzes research data using AI to extract insights, 
+ *
+ * This function creates a step that analyzes research data using AI to extract insights,
  * identify patterns, and provide recommendations based on the specified focus area.
- * The step will process available data from previous steps, such as extracted content 
+ * The step will process available data from previous steps, such as extracted content
  * and fact-checked statements.
- * 
+ *
  * @param options - Configuration options for the analysis step
  * @param options.focus - The focus area for analysis (e.g., 'market-trends', 'technical-details')
  * @param options.llm - Language model to use (falls back to state.defaultLLM if not provided)
@@ -440,14 +448,14 @@ ${includeRecommendations ? 'Provide actionable recommendations based on your ana
  * @param options.includeInResults - Whether to include analysis in final results (default: true)
  * @param options.allowEmptyContent - Whether to proceed if no content is available (default: false)
  * @param options.maxContentSize - Maximum content size in characters (default: 10000)
- * 
+ *
  * @returns A configured analysis step for the research pipeline
- * 
+ *
  * @example
  * ```typescript
  * import { research, analyze } from '@plust/datasleuth';
  * import { openai } from '@ai-sdk/openai';
- * 
+ *
  * const results = await research({
  *   query: "Impact of AI on healthcare",
  *   steps: [
@@ -465,11 +473,11 @@ ${includeRecommendations ? 'Provide actionable recommendations based on your ana
  */
 export function analyze(options: AnalyzeOptions): ReturnType<typeof createStep> {
   return createStep(
-    'Analyze', 
+    'Analyze',
     // Wrapper function that matches the expected signature
     async (state: ResearchState, opts?: Record<string, any>) => {
       return executeAnalyzeStep(state, options);
-    }, 
+    },
     options,
     {
       // Mark as retryable by default for the entire step
@@ -478,7 +486,7 @@ export function analyze(options: AnalyzeOptions): ReturnType<typeof createStep> 
       retryDelay: options.retry?.baseDelay || 1000,
       backoffFactor: 2,
       // Mark as optional if allowEmptyContent is true
-      optional: options.allowEmptyContent || false
+      optional: options.allowEmptyContent || false,
     }
   );
 }

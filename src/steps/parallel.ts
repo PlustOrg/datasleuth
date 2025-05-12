@@ -2,17 +2,17 @@
  * Parallel execution of multiple research tracks
  * Enables concurrent research paths for more efficient deep research
  */
-import { createStep } from '../utils/steps';
-import { ResearchState, ResearchStep } from '../types/pipeline';
-import { TrackResult } from './track';
+import { createStep } from '../utils/steps.js';
+import { ResearchState, ResearchStep } from '../types/pipeline.js';
+import { TrackResult } from './track.js';
 import {
   ValidationError,
   ConfigurationError,
   ProcessingError,
   TimeoutError,
   BaseResearchError,
-} from '../types/errors';
-import { logger, createStepLogger } from '../utils/logging';
+} from '../types/errors.js';
+import { logger, createStepLogger } from '../utils/logging.js';
 
 /**
  * Custom error for parallel execution issues

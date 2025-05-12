@@ -3,19 +3,14 @@
  * Synthesizes information into concise summaries using LLMs
  */
 import * as mastra from 'mastra';
-import { createStep } from '../utils/steps';
-import { ResearchState, ExtractedContent, FactCheckResult } from '../types/pipeline';
-import { StepOptions } from '../types/pipeline';
+import { createStep } from '../utils/steps.js';
+import { ResearchState, ExtractedContent, FactCheckResult } from '../types/pipeline.js';
+import { StepOptions } from '../types/pipeline.js';
 import { z } from 'zod';
 import { generateText, generateObject, LanguageModel } from 'ai';
-import { 
-  ValidationError, 
-  ConfigurationError, 
-  LLMError,
-  ProcessingError 
-} from '../types/errors';
-import { logger, createStepLogger } from '../utils/logging';
-import { executeWithRetry } from '../utils/retry';
+import { ValidationError, ConfigurationError, LLMError, ProcessingError } from '../types/errors.js';
+import { logger, createStepLogger } from '../utils/logging.js';
+import { executeWithRetry } from '../utils/retry.js';
 
 /**
  * Format options for summary output
@@ -29,7 +24,7 @@ const structuredSummarySchema = z.object({
   summary: z.string(),
   keyPoints: z.array(z.string()),
   sources: z.array(z.string()).optional(),
-  sections: z.record(z.string()).optional()
+  sections: z.record(z.string()).optional(),
 });
 
 export type StructuredSummary = z.infer<typeof structuredSummarySchema>;
@@ -90,7 +85,7 @@ async function executeSummarizeStep(
   options: SummarizeOptions
 ): Promise<ResearchState> {
   const stepLogger = createStepLogger('Summarization');
-  
+
   const {
     maxLength = 2000,
     llm,
@@ -101,11 +96,11 @@ async function executeSummarizeStep(
     includeInResults = true,
     customPrompt,
     additionalInstructions,
-    retry = { maxRetries: 2, baseDelay: 1000 }
+    retry = { maxRetries: 2, baseDelay: 1000 },
   } = options;
 
   stepLogger.info('Starting content summarization');
-  
+
   try {
     // Validate temperature
     if (temperature < 0 || temperature > 1) {
@@ -114,13 +109,13 @@ async function executeSummarizeStep(
         step: 'Summarization',
         details: { temperature },
         suggestions: [
-          "Temperature must be between 0.0 and 1.0",
-          "Lower values (0.0-0.3) provide more consistent summaries",
-          "Higher values (0.7-1.0) provide more creative summaries"
-        ]
+          'Temperature must be between 0.0 and 1.0',
+          'Lower values (0.0-0.3) provide more consistent summaries',
+          'Higher values (0.7-1.0) provide more creative summaries',
+        ],
       });
     }
-    
+
     // Validate maximum length
     if (maxLength <= 0) {
       throw new ValidationError({
@@ -128,135 +123,143 @@ async function executeSummarizeStep(
         step: 'Summarization',
         details: { maxLength },
         suggestions: [
-          "Maximum length must be a positive number",
-          "Recommended values are between 500-5000 characters"
-        ]
+          'Maximum length must be a positive number',
+          'Recommended values are between 500-5000 characters',
+        ],
       });
     }
-    
+
     // Get content to summarize
     const contentToSummarize: string[] = [];
-    
+
     // Add extracted content if available
     if (state.data.extractedContent) {
-      contentToSummarize.push(...state.data.extractedContent.map((item: ExtractedContent) => item.content));
+      contentToSummarize.push(
+        ...state.data.extractedContent.map((item: ExtractedContent) => item.content)
+      );
     }
-    
+
     // Add research plan if available
     if (state.data.researchPlan) {
       contentToSummarize.push(JSON.stringify(state.data.researchPlan));
     }
-    
+
     // Add factual information if available
     if (state.data.factChecks) {
-      const validFactChecks = state.data.factChecks.filter((check: FactCheckResult) => check.isValid);
+      const validFactChecks = state.data.factChecks.filter(
+        (check: FactCheckResult) => check.isValid
+      );
       contentToSummarize.push(...validFactChecks.map((check: FactCheckResult) => check.statement));
     }
-    
+
     if (contentToSummarize.length === 0) {
       stepLogger.warn('No content found for summarization');
-      
+
       // Check if we should continue despite empty content
       if (options.allowEmptyContent) {
         stepLogger.info('Continuing with empty content due to allowEmptyContent=true');
         const emptyMessage = 'No content available for summarization.';
-        
+
         // Create a state with placeholder summary
         const updatedState = {
           ...state,
           data: {
             ...state.data,
-            summary: emptyMessage
+            summary: emptyMessage,
           },
           metadata: {
             ...state.metadata,
             warnings: [
               ...(state.metadata.warnings || []),
-              'Summarization created with empty content.'
-            ]
-          }
+              'Summarization created with empty content.',
+            ],
+          },
         };
-        
+
         // Add to results if requested
         if (includeInResults) {
           return {
             ...updatedState,
-            results: [
-              ...updatedState.results,
-              { summary: emptyMessage }
-            ]
+            results: [...updatedState.results, { summary: emptyMessage }],
           };
         }
-        
+
         return updatedState;
       }
-      
+
       // Otherwise throw an error
       throw new ValidationError({
         message: 'No content available for summarization',
         step: 'Summarization',
-        details: { 
+        details: {
           hasExtractedContent: !!state.data.extractedContent,
-          extractedContentLength: state.data.extractedContent ? state.data.extractedContent.length : 0
+          extractedContentLength: state.data.extractedContent
+            ? state.data.extractedContent.length
+            : 0,
         },
         suggestions: [
-          "Ensure the content extraction step runs successfully before summarization",
-          "Set 'allowEmptyContent' to true if this step should be optional"
-        ]
+          'Ensure the content extraction step runs successfully before summarization',
+          "Set 'allowEmptyContent' to true if this step should be optional",
+        ],
       });
     }
 
     stepLogger.info(`Summarizing ${contentToSummarize.length} content items`);
-    stepLogger.debug(`Format: ${format}, max length: ${maxLength}, include citations: ${includeCitations}`);
-    
+    stepLogger.debug(
+      `Format: ${format}, max length: ${maxLength}, include citations: ${includeCitations}`
+    );
+
     // Normalize focus to array if it's a string
     const focusArray = typeof focus === 'string' ? [focus] : focus;
-    
+
     // Check for an LLM to use - either from options or from state
     const modelToUse = llm || state.defaultLLM;
-    
+
     // If no LLM is available, throw an error
     if (!modelToUse) {
       throw new ConfigurationError({
-        message: "No language model provided for summarization step",
+        message: 'No language model provided for summarization step',
         step: 'Summarization',
         details: { options },
         suggestions: [
           "Provide an LLM in the step options using the 'llm' parameter",
-          "Set a defaultLLM when initializing the research function",
-          "Example: research({ defaultLLM: openai('gpt-4'), ... })"
-        ]
+          'Set a defaultLLM when initializing the research function',
+          "Example: research({ defaultLLM: openai('gpt-4'), ... })",
+        ],
       });
     }
 
     // Generate summary using the provided LLM with retry logic
     const summaryResult = await executeWithRetry(
-      () => generateSummaryWithLLM(
-        contentToSummarize,
-        state.query,
-        maxLength,
-        format,
-        focusArray,
-        includeCitations,
-        additionalInstructions,
-        modelToUse,
-        temperature,
-        customPrompt
-      ),
+      () =>
+        generateSummaryWithLLM(
+          contentToSummarize,
+          state.query,
+          maxLength,
+          format,
+          focusArray,
+          includeCitations,
+          additionalInstructions,
+          modelToUse,
+          temperature,
+          customPrompt
+        ),
       {
         maxRetries: retry.maxRetries ?? 2,
         retryDelay: retry.baseDelay ?? 1000,
         backoffFactor: 2,
         onRetry: (attempt, error, delay) => {
-          stepLogger.warn(`Retry attempt ${attempt} for summarization: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
-        }
+          stepLogger.warn(
+            `Retry attempt ${attempt} for summarization: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`
+          );
+        },
       }
     );
-    
+
     // Handle different return types based on format
     let summary: string;
     let structuredSummary: any;
-    
+
     if (typeof summaryResult === 'string') {
       summary = summaryResult;
       stepLogger.info(`Summary generated successfully (${summary.length} characters)`);
@@ -266,7 +269,7 @@ async function executeSummarizeStep(
       structuredSummary = summaryResult.structuredSummary;
       stepLogger.info(`Structured summary generated successfully (${summary.length} characters)`);
     }
-    
+
     // Update state with summary
     const newState = {
       ...state,
@@ -274,18 +277,20 @@ async function executeSummarizeStep(
         ...state.data,
         summary,
         // Only add structuredSummary if it exists
-        ...(structuredSummary ? { structuredSummary } : {})
+        ...(structuredSummary ? { structuredSummary } : {}),
       },
       metadata: {
         ...state.metadata,
         summaryLength: summary.length,
         summaryFormat: format,
         // Add info about structured format if available
-        ...(structuredSummary ? { 
-          hasStructuredSummary: true,
-          structuredSummaryKeys: Object.keys(structuredSummary)
-        } : {})
-      }
+        ...(structuredSummary
+          ? {
+              hasStructuredSummary: true,
+              structuredSummaryKeys: Object.keys(structuredSummary),
+            }
+          : {}),
+      },
     };
 
     // Add to results if requested
@@ -294,10 +299,10 @@ async function executeSummarizeStep(
         ...newState,
         results: [
           ...newState.results,
-          { 
+          {
             summary,
             // Include structured data in results if available
-            ...(structuredSummary ? { structuredSummary } : {})
+            ...(structuredSummary ? { structuredSummary } : {}),
           },
         ],
       };
@@ -306,17 +311,19 @@ async function executeSummarizeStep(
     return newState;
   } catch (error: unknown) {
     // Handle different error types appropriately
-    if (error instanceof ValidationError || 
-        error instanceof LLMError || 
-        error instanceof ConfigurationError) {
+    if (
+      error instanceof ValidationError ||
+      error instanceof LLMError ||
+      error instanceof ConfigurationError
+    ) {
       // These are already properly formatted, just throw them
       throw error;
     }
-    
+
     // Handle generic errors
     const errorMessage = error instanceof Error ? error.message : String(error);
     stepLogger.error(`Error during summarization: ${errorMessage}`);
-    
+
     // Check for specific error patterns
     if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
       throw new LLMError({
@@ -325,10 +332,10 @@ async function executeSummarizeStep(
         details: { error },
         retry: false,
         suggestions: [
-          "Reduce the amount of content being summarized",
-          "Use a model with larger context window",
-          "Consider breaking the summarization into multiple steps"
-        ]
+          'Reduce the amount of content being summarized',
+          'Use a model with larger context window',
+          'Consider breaking the summarization into multiple steps',
+        ],
       });
     } else if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
       throw new LLMError({
@@ -337,13 +344,13 @@ async function executeSummarizeStep(
         details: { error },
         retry: true,
         suggestions: [
-          "Wait and try again later",
-          "Consider using a different LLM provider",
-          "Implement rate limiting in your application"
-        ]
+          'Wait and try again later',
+          'Consider using a different LLM provider',
+          'Implement rate limiting in your application',
+        ],
       });
     }
-    
+
     // Generic processing error
     throw new ProcessingError({
       message: `Summarization failed: ${errorMessage}`,
@@ -351,10 +358,10 @@ async function executeSummarizeStep(
       details: { error, options },
       retry: true,
       suggestions: [
-        "Check your summarization configuration",
-        "Try with a smaller set of content",
-        "Consider using a different LLM provider or model"
-      ]
+        'Check your summarization configuration',
+        'Try with a smaller set of content',
+        'Consider using a different LLM provider or model',
+      ],
     });
   }
 }
@@ -373,9 +380,9 @@ async function generateSummaryWithLLM(
   llm: LanguageModel,
   temperature: number,
   customPrompt?: string
-): Promise<string | { summary: string, structuredSummary?: StructuredSummary }> {
+): Promise<string | { summary: string; structuredSummary?: StructuredSummary }> {
   const logger = createStepLogger('SummaryGenerator');
-  
+
   try {
     // Special handling for test environment
     if (process.env.NODE_ENV === 'test') {
@@ -389,22 +396,22 @@ async function generateSummaryWithLLM(
             sources: ['https://example.com/1', 'https://example.com/2'],
             sections: {
               section1: 'Content for section 1',
-              section2: 'Content for section 2'
-            }
-          }
+              section2: 'Content for section 2',
+            },
+          },
         };
       }
-      
+
       // For non-structured formats, return a simple string
       return 'This is a generated summary of the research content.';
     }
-    
+
     // Prepare the content to summarize (limit to avoid token limits)
     const contentText = contentItems.join('\n\n').slice(0, 15000);
-    
+
     // Build formatting instructions based on the requested format
     let formatInstructions = '';
-    
+
     switch (format) {
       case 'paragraph':
         formatInstructions = 'structure the summary as coherent paragraphs with a logical flow';
@@ -413,28 +420,28 @@ async function generateSummaryWithLLM(
         formatInstructions = 'structure the summary as bullet points highlighting key insights';
         break;
       case 'structured':
-        formatInstructions = 'structure the summary with clear sections and provide the output as valid JSON';
+        formatInstructions =
+          'structure the summary with clear sections and provide the output as valid JSON';
         break;
     }
-    
+
     // Build focus instructions if any focus areas are specified
-    const focusInstructions = focus.length > 0
-      ? `Pay particular attention to these aspects: ${focus.join(', ')}.`
-      : '';
-    
+    const focusInstructions =
+      focus.length > 0 ? `Pay particular attention to these aspects: ${focus.join(', ')}.` : '';
+
     // Build citation instructions
     const citationInstructions = includeCitations
       ? 'Include citations to relevant sources, formatted as a numbered list at the end of the summary.'
       : 'Do not include citations.';
-    
+
     // Add the additional instructions if provided
     const extraInstructions = additionalInstructions
       ? `Additional requirements: ${additionalInstructions}`
       : '';
-    
+
     // Use custom prompt or default
     const systemPrompt = customPrompt || DEFAULT_SUMMARIZE_PROMPT;
-    
+
     // Construct the prompt for summary generation
     const summaryPrompt = `
 Query: "${query}"
@@ -452,7 +459,7 @@ Keep your summary under ${maxLength} characters.
 `;
 
     logger.debug(`Generating summary with ${format} format, maxLength: ${maxLength}`);
-    
+
     // For structured format, use generateObject with a schema
     if (format === 'structured') {
       try {
@@ -464,19 +471,21 @@ Keep your summary under ${maxLength} characters.
           temperature,
           maxTokens: Math.floor(maxLength / 4), // rough character to token conversion
         });
-        
+
         logger.debug(`Generated structured summary with ${object.keyPoints.length} key points`);
-        
+
         return {
           summary: object.summary,
-          structuredSummary: object
+          structuredSummary: object,
         };
       } catch (error) {
         // If generateObject fails, we'll fall back to generateText
-        logger.warn(`Failed to generate structured summary with generateObject: ${error instanceof Error ? error.message : String(error)}. Falling back to generateText.`);
+        logger.warn(
+          `Failed to generate structured summary with generateObject: ${error instanceof Error ? error.message : String(error)}. Falling back to generateText.`
+        );
       }
     }
-    
+
     // For non-structured formats or if generateObject failed, use generateText
     const { text } = await generateText({
       model: llm,
@@ -487,43 +496,46 @@ Keep your summary under ${maxLength} characters.
     });
 
     logger.debug(`Summary generated with ${text.length} characters`);
-    
+
     // If format is structured but we had to use generateText, try to parse as JSON
     if (format === 'structured') {
       try {
         // Try to extract JSON if it's enclosed in ```json and ``` blocks
-        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || 
-                          text.match(/{[\s\S]*}/);
-        
+        const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || text.match(/{[\s\S]*}/);
+
         const jsonString = jsonMatch ? jsonMatch[0].replace(/```(?:json)?\s*|\s*```/g, '') : text;
-        
+
         // Parse the JSON and validate against our schema
         const parsedJson = JSON.parse(jsonString);
         const validatedData = structuredSummarySchema.parse(parsedJson);
-        
+
         return {
           summary: validatedData.summary,
-          structuredSummary: validatedData
+          structuredSummary: validatedData,
         };
       } catch (parseError) {
-        logger.warn(`Failed to parse structured summary as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        logger.warn(
+          `Failed to parse structured summary as JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+        );
         // Fall back to treating it as plain text
         return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
       }
     }
-    
+
     // For non-structured formats, just return the text
     return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
   } catch (error: unknown) {
-    logger.error(`Error generating summary with LLM: ${error instanceof Error ? error.message : String(error)}`);
-    
+    logger.error(
+      `Error generating summary with LLM: ${error instanceof Error ? error.message : String(error)}`
+    );
+
     // Special handling for test environment to make tests pass
     if (process.env.NODE_ENV === 'test') {
       // For test with explicit errors, still throw the error
       if (error instanceof Error && error.message.includes('Summarization failed')) {
         throw error;
       }
-      
+
       // For other errors in tests, use mock data based on the requested format
       if (format === 'structured') {
         return {
@@ -531,18 +543,18 @@ Keep your summary under ${maxLength} characters.
           structuredSummary: {
             summary: 'This is a generated summary of the research content.',
             keyPoints: ['Key point 1', 'Key point 2'],
-            sources: ['https://example.com/1', 'https://example.com/2']
-          }
+            sources: ['https://example.com/1', 'https://example.com/2'],
+          },
         };
       }
-      
+
       // For non-structured formats, return a simple string
       return 'This is a generated summary of the research content.';
     }
-    
+
     // Format the error for better handling
     const errorMessage = error instanceof Error ? error.message : String(error);
-    
+
     // Check for specific error patterns and throw appropriate errors
     if (errorMessage.includes('context') || errorMessage.includes('token limit')) {
       throw new LLMError({
@@ -551,13 +563,13 @@ Keep your summary under ${maxLength} characters.
         details: { error, contentLength: contentItems.join('\n\n').length },
         retry: false,
         suggestions: [
-          "Reduce the amount of content being summarized",
-          "Use a model with larger context window",
-          "Break the content into smaller chunks"
-        ]
+          'Reduce the amount of content being summarized',
+          'Use a model with larger context window',
+          'Break the content into smaller chunks',
+        ],
       });
     }
-    
+
     if (errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
       throw new LLMError({
         message: `LLM rate limit exceeded: ${errorMessage}`,
@@ -565,13 +577,13 @@ Keep your summary under ${maxLength} characters.
         details: { error },
         retry: true,
         suggestions: [
-          "Wait and try again later",
-          "Implement request throttling in your application",
-          "Consider using a different LLM provider or API key"
-        ]
+          'Wait and try again later',
+          'Implement request throttling in your application',
+          'Consider using a different LLM provider or API key',
+        ],
       });
     }
-    
+
     // Generic LLM error
     throw new LLMError({
       message: `Error generating summary: ${errorMessage}`,
@@ -579,33 +591,34 @@ Keep your summary under ${maxLength} characters.
       details: { error },
       retry: true,
       suggestions: [
-        "Check your LLM configuration",
-        "Verify API key and model availability",
-        "The LLM service might be experiencing issues, try again later"
-      ]
+        'Check your LLM configuration',
+        'Verify API key and model availability',
+        'The LLM service might be experiencing issues, try again later',
+      ],
     });
   }
 }
 
 /**
  * Creates a summarization step for the research pipeline
- * 
+ *
  * @param options Configuration options for summarization
  * @returns A summarization step for the research pipeline
  */
 export function summarize(options: SummarizeOptions = {}): ReturnType<typeof createStep> {
-  return createStep('Summarize', 
+  return createStep(
+    'Summarize',
     // Wrapper function that matches the expected signature
     async (state: ResearchState, opts?: StepOptions) => {
       return executeSummarizeStep(state, options);
-    }, 
+    },
     options,
     {
       // Mark as retryable by default for the entire step
       retryable: true,
       maxRetries: options.retry?.maxRetries || 2,
       retryDelay: options.retry?.baseDelay || 1000,
-      backoffFactor: 2
+      backoffFactor: 2,
     }
   );
 }

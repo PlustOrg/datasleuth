@@ -3,19 +3,18 @@
  * Validates information using LLMs and external sources
  */
 import * as mastra from 'mastra';
-import { createStep } from '../utils/steps';
-import { ResearchState, FactCheckResult as StateFactCheckResult, ExtractedContent as StateExtractedContent } from '../types/pipeline';
-import { StepOptions } from '../types/pipeline';
+import { createStep } from '../utils/steps.js';
+import {
+  ResearchState,
+  FactCheckResult as StateFactCheckResult,
+  ExtractedContent as StateExtractedContent,
+} from '../types/pipeline.js';
+import { StepOptions } from '../types/pipeline.js';
 import { z } from 'zod';
 import { generateText, generateObject, LanguageModel } from 'ai';
-import { 
-  ValidationError, 
-  LLMError, 
-  ConfigurationError,
-  ApiError
-} from '../types/errors';
-import { logger, createStepLogger } from '../utils/logging';
-import { executeWithRetry } from '../utils/retry';
+import { ValidationError, LLMError, ConfigurationError, ApiError } from '../types/errors.js';
+import { logger, createStepLogger } from '../utils/logging.js';
+import { executeWithRetry } from '../utils/retry.js';
 
 /**
  * Schema for fact check results
@@ -88,7 +87,7 @@ async function executeFactCheckStep(
   options: FactCheckOptions
 ): Promise<ResearchState> {
   const stepLogger = createStepLogger('FactCheck');
-  
+
   const {
     threshold = 0.7,
     llm,
@@ -100,15 +99,15 @@ async function executeFactCheckStep(
     customPrompt,
     retry = { maxRetries: 2, baseDelay: 1000 },
     continueOnError = true,
-    allowEmptyContent = false
+    allowEmptyContent = false,
   } = options;
 
   stepLogger.info('Starting fact checking execution');
-  
+
   try {
     // Get statements to fact check
     let statementsToCheck: string[] = [...statements];
-    
+
     // If no statements provided, extract from content
     if (statementsToCheck.length === 0 && state.data.extractedContent) {
       stepLogger.debug('Extracting statements from content');
@@ -117,46 +116,46 @@ async function executeFactCheckStep(
         maxStatements
       );
     }
-    
+
     if (statementsToCheck.length === 0) {
       stepLogger.warn('No statements found for fact checking');
-      
+
       if (!allowEmptyContent) {
         throw new ValidationError({
           message: 'No content available for fact checking',
           step: 'FactCheck',
-          details: { 
+          details: {
             hasExtractedContent: !!state.data.extractedContent,
-            contentLength: state.data.extractedContent ? state.data.extractedContent.length : 0
+            contentLength: state.data.extractedContent ? state.data.extractedContent.length : 0,
           },
           suggestions: [
-            "Ensure the content extraction step runs successfully before fact checking",
+            'Ensure the content extraction step runs successfully before fact checking',
             "Provide statements explicitly via the 'statements' option if no content is available",
-            "Set 'allowEmptyContent' to true if this step should be optional"
-          ]
+            "Set 'allowEmptyContent' to true if this step should be optional",
+          ],
         });
       }
-      
+
       return state;
     }
 
     stepLogger.info(`Fact checking ${statementsToCheck.length} statements`);
     stepLogger.debug(`Using confidence threshold: ${threshold}`);
-    
+
     // Check for an LLM to use - either from options or from state
     const modelToUse = llm || state.defaultLLM;
-    
+
     // If no LLM is available, throw an error
     if (!modelToUse) {
       throw new ConfigurationError({
-        message: "No language model provided for fact checking step",
+        message: 'No language model provided for fact checking step',
         step: 'FactCheck',
         details: { options },
         suggestions: [
           "Provide an LLM in the step options using the 'llm' parameter",
-          "Set a defaultLLM when initializing the research function",
-          "Example: research({ defaultLLM: openai('gpt-4'), ... })"
-        ]
+          'Set a defaultLLM when initializing the research function',
+          "Example: research({ defaultLLM: openai('gpt-4'), ... })",
+        ],
       });
     }
 
@@ -171,20 +170,24 @@ async function executeFactCheckStep(
       customPrompt,
       {
         maxRetries: retry.maxRetries || 2,
-        baseDelay: retry.baseDelay || 1000
+        baseDelay: retry.baseDelay || 1000,
       },
       stepLogger,
       continueOnError
     );
     const timeTaken = Date.now() - startTime;
-    
+
     // Calculate overall factual accuracy score
-    const validStatements = factCheckResults.filter(result => result.isValid);
+    const validStatements = factCheckResults.filter((result) => result.isValid);
     const factualAccuracyScore = validStatements.length / factCheckResults.length;
-    
-    stepLogger.info(`Fact checking complete: ${validStatements.length}/${factCheckResults.length} statements valid (${(factualAccuracyScore * 100).toFixed(1)}%)`);
-    stepLogger.debug(`Fact checking took ${timeTaken}ms (${(timeTaken / factCheckResults.length).toFixed(0)}ms per statement)`);
-    
+
+    stepLogger.info(
+      `Fact checking complete: ${validStatements.length}/${factCheckResults.length} statements valid (${(factualAccuracyScore * 100).toFixed(1)}%)`
+    );
+    stepLogger.debug(
+      `Fact checking took ${timeTaken}ms (${(timeTaken / factCheckResults.length).toFixed(0)}ms per statement)`
+    );
+
     // Update state with fact check results
     const newState = {
       ...state,
@@ -196,17 +199,16 @@ async function executeFactCheckStep(
           totalChecked: factCheckResults.length,
           valid: validStatements.length,
           invalid: factCheckResults.length - validStatements.length,
-          averageConfidence: factCheckResults.reduce((sum, check) => sum + check.confidence, 0) / factCheckResults.length,
+          averageConfidence:
+            factCheckResults.reduce((sum, check) => sum + check.confidence, 0) /
+            factCheckResults.length,
           executionTimeMs: timeTaken,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       },
       metadata: {
         ...state.metadata,
-        confidenceScore: Math.max(
-          state.metadata.confidenceScore || 0,
-          factualAccuracyScore
-        ),
+        confidenceScore: Math.max(state.metadata.confidenceScore || 0, factualAccuracyScore),
       },
     };
 
@@ -223,8 +225,8 @@ async function executeFactCheckStep(
               total: factCheckResults.length,
               valid: validStatements.length,
               invalid: factCheckResults.length - validStatements.length,
-              averageConfidence: newState.data.factCheckMetadata.averageConfidence
-            }
+              averageConfidence: newState.data.factCheckMetadata.averageConfidence,
+            },
           },
         ],
       };
@@ -233,49 +235,55 @@ async function executeFactCheckStep(
     return newState;
   } catch (error: unknown) {
     // Handle specific error types
-    if (error instanceof ValidationError || 
-        error instanceof LLMError || 
-        error instanceof ConfigurationError) {
+    if (
+      error instanceof ValidationError ||
+      error instanceof LLMError ||
+      error instanceof ConfigurationError
+    ) {
       // These are already properly formatted errors, just throw them
       throw error;
     }
-    
+
     // Handle generic errors
     const errorMessage = error instanceof Error ? error.message : String(error);
     stepLogger.error(`Error during fact checking execution: ${errorMessage}`);
-    
+
     // Determine error type based on message patterns
-    if (errorMessage.includes('rate limit') || 
-        errorMessage.includes('quota') || 
-        errorMessage.includes('too many requests')) {
+    if (
+      errorMessage.includes('rate limit') ||
+      errorMessage.includes('quota') ||
+      errorMessage.includes('too many requests')
+    ) {
       throw new ApiError({
         message: `API rate limit exceeded during fact checking: ${errorMessage}`,
         step: 'FactCheck',
         details: { error },
         retry: true,
         suggestions: [
-          "Wait and try again later",
-          "Reduce the number of statements to check",
-          "Consider using a different LLM provider or API key",
-          "Implement request throttling in your application"
-        ]
+          'Wait and try again later',
+          'Reduce the number of statements to check',
+          'Consider using a different LLM provider or API key',
+          'Implement request throttling in your application',
+        ],
       });
-    } else if (errorMessage.includes('context length') || 
-               errorMessage.includes('token limit') || 
-               errorMessage.includes('too long')) {
+    } else if (
+      errorMessage.includes('context length') ||
+      errorMessage.includes('token limit') ||
+      errorMessage.includes('too long')
+    ) {
       throw new LLMError({
         message: `LLM context length exceeded during fact checking: ${errorMessage}`,
         step: 'FactCheck',
         details: { error },
         retry: false,
         suggestions: [
-          "Reduce the statement length or complexity",
-          "Process fewer statements at once",
-          "Use a model with larger context window"
-        ]
+          'Reduce the statement length or complexity',
+          'Process fewer statements at once',
+          'Use a model with larger context window',
+        ],
       });
     }
-    
+
     // Generic LLM error fallback
     throw new LLMError({
       message: `Error during fact checking with LLM: ${errorMessage}`,
@@ -283,10 +291,10 @@ async function executeFactCheckStep(
       details: { originalError: error },
       retry: true,
       suggestions: [
-        "Check your LLM configuration",
-        "Verify API key and model availability",
-        "The LLM service might be experiencing issues, try again later"
-      ]
+        'Check your LLM configuration',
+        'Verify API key and model availability',
+        'The LLM service might be experiencing issues, try again later',
+      ],
     });
   }
 }
@@ -301,33 +309,27 @@ async function extractStatementsFromContent(
 ): Promise<string[]> {
   // Simulate extraction by splitting content into sentences
   const statements: string[] = [];
-  
+
   // Process each content item
   for (const content of extractedContent) {
     if (!content.content) continue;
-    
+
     // For tests, customize statement extraction based on content
     if (process.env.NODE_ENV === 'test' && extractedContent.length > 0) {
       // If content mentions "Water boils", include it in test statements
-      if (content.content.includes("Water boils")) {
-        return [
-          "Water boils at 100 degrees Celsius",
-          "The Earth orbits the Sun"
-        ];
+      if (content.content.includes('Water boils')) {
+        return ['Water boils at 100 degrees Celsius', 'The Earth orbits the Sun'];
       }
       // Default test statements
-      return [
-        "Test statement 1",
-        "Test statement 2"
-      ];
+      return ['Test statement 1', 'Test statement 2'];
     }
-    
+
     // Simple sentence splitting - in real implementation use NLP
     const sentences = content.content
       .split(/[.!?]/)
       .map((s: string) => s.trim())
       .filter((s: string) => s.length > 20 && s.length < 200);
-    
+
     // Add sentences to statements array
     for (const sentence of sentences) {
       if (statements.length >= maxStatements) break;
@@ -335,10 +337,10 @@ async function extractStatementsFromContent(
         statements.push(sentence);
       }
     }
-    
+
     if (statements.length >= maxStatements) break;
   }
-  
+
   return statements;
 }
 
@@ -358,15 +360,17 @@ async function performFactCheckingWithLLM(
 ): Promise<StateFactCheckResult[]> {
   const results: StateFactCheckResult[] = [];
   const systemPrompt = customPrompt || DEFAULT_FACT_CHECK_PROMPT;
-  const failedStatements: Array<{statement: string, error: string}> = [];
-  
+  const failedStatements: Array<{ statement: string; error: string }> = [];
+
   // Use default logging if stepLogger not provided
   const logger = stepLogger || createStepLogger('FactCheck');
-  
+
   // Process each statement individually to maintain detailed control
   for (const statement of statements) {
-    logger.debug(`Processing statement: "${statement.substring(0, 50)}${statement.length > 50 ? '...' : ''}"`);
-    
+    logger.debug(
+      `Processing statement: "${statement.substring(0, 50)}${statement.length > 50 ? '...' : ''}"`
+    );
+
     try {
       // Use retry for LLM calls which may have transient failures
       const checkResult = await executeWithRetry(
@@ -391,42 +395,49 @@ Analyze this statement for factual accuracy using a threshold of ${threshold.toF
           retryDelay: retry?.baseDelay || 1000,
           backoffFactor: 2,
           onRetry: (attempt, error, delay) => {
-            logger.warn(`Retry attempt ${attempt} for fact checking: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
-          }
+            logger.warn(
+              `Retry attempt ${attempt} for fact checking: ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`
+            );
+          },
         }
       );
-      
+
       // Only add results that meet our confidence threshold
       if (checkResult.confidence >= threshold) {
         results.push(checkResult);
-        logger.debug(`Statement verified: ${checkResult.isValid ? 'Valid' : 'Invalid'} (confidence: ${checkResult.confidence.toFixed(2)})`);
+        logger.debug(
+          `Statement verified: ${checkResult.isValid ? 'Valid' : 'Invalid'} (confidence: ${checkResult.confidence.toFixed(2)})`
+        );
       } else {
-        logger.info(`Statement skipped due to low confidence (${checkResult.confidence.toFixed(2)}): "${statement.substring(0, 50)}${statement.length > 50 ? '...' : ''}"`);
+        logger.info(
+          `Statement skipped due to low confidence (${checkResult.confidence.toFixed(2)}): "${statement.substring(0, 50)}${statement.length > 50 ? '...' : ''}"`
+        );
       }
-      
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`Error checking statement: ${errorMessage}`);
-      
+
       failedStatements.push({
         statement,
-        error: errorMessage
+        error: errorMessage,
       });
-      
+
       // Special handling for test environment to make sure errors propagate in tests
-      if (process.env.NODE_ENV === 'test' && 
-          (errorMessage.includes('LLM failure') || errorMessage.includes('LLM error'))) {
+      if (
+        process.env.NODE_ENV === 'test' &&
+        (errorMessage.includes('LLM failure') || errorMessage.includes('LLM error'))
+      ) {
         // For test environment, we need to propagate LLM errors regardless of continueOnError
         throw error; // Propagate the error in test environment
       }
-      
+
       // If we should not continue on error, rethrow
       if (!continueOnError) {
         // If it's already a typed error, just rethrow it
         if (error instanceof LLMError || error instanceof ApiError) {
           throw error;
         }
-        
+
         // Otherwise wrap in a LLMError
         throw new LLMError({
           message: `Error performing fact check on statement: ${errorMessage}`,
@@ -434,10 +445,10 @@ Analyze this statement for factual accuracy using a threshold of ${threshold.toF
           details: { statement, error },
           retry: true,
           suggestions: [
-            "Check your LLM configuration",
-            "Verify API key and model availability",
-            "The statement may be too complex or confusing for the model"
-          ]
+            'Check your LLM configuration',
+            'Verify API key and model availability',
+            'The statement may be too complex or confusing for the model',
+          ],
         });
       } else {
         // Add a fallback result
@@ -446,12 +457,12 @@ Analyze this statement for factual accuracy using a threshold of ${threshold.toF
           isValid: false,
           confidence: 0.5,
           evidence: [`Error: ${errorMessage}`],
-          corrections: 'Unable to verify this statement due to an error'
+          corrections: 'Unable to verify this statement due to an error',
         });
       }
     }
   }
-  
+
   // If all statements failed and we have at least one, throw an error despite continueOnError
   if (results.length === 0 && failedStatements.length > 0) {
     throw new LLMError({
@@ -460,29 +471,29 @@ Analyze this statement for factual accuracy using a threshold of ${threshold.toF
       details: { failedStatements },
       retry: true,
       suggestions: [
-        "Check your LLM configuration and API key",
-        "The LLM service might be experiencing issues",
-        "Try with different statements or a different model"
-      ]
+        'Check your LLM configuration and API key',
+        'The LLM service might be experiencing issues',
+        'Try with different statements or a different model',
+      ],
     });
   }
-  
+
   return results;
 }
 
 /**
  * Creates a fact checking step for the research pipeline
- * 
+ *
  * @param options Configuration options for fact checking
  * @returns A fact checking step for the research pipeline
  */
 export function factCheck(options: FactCheckOptions = {}): ReturnType<typeof createStep> {
   return createStep(
-    'FactCheck', 
+    'FactCheck',
     // Wrapper function that matches the expected signature
     async (state: ResearchState, opts?: StepOptions) => {
       return executeFactCheckStep(state, options);
-    }, 
+    },
     options,
     {
       // Mark as retryable by default for the entire step
@@ -491,7 +502,7 @@ export function factCheck(options: FactCheckOptions = {}): ReturnType<typeof cre
       retryDelay: options.retry?.baseDelay || 1000,
       backoffFactor: 2,
       // Mark as optional if allowEmptyContent is true
-      optional: options.allowEmptyContent || false
+      optional: options.allowEmptyContent || false,
     }
   );
 }

@@ -1,17 +1,17 @@
-import { createMockState, executeStep } from '../test-utils';
-import { mockAnalyze } from '../mocks/analyze-mock';
-import { LLMError, ValidationError } from '../../src/types/errors';
+import { createMockState, executeStep } from '../test-utils.js';
+import { mockAnalyze } from '../mocks/analyze-mock.js';
+import { LLMError, ValidationError } from '../../src/types/errors.js';
 
 describe('analyze step', () => {
   // Increase timeout for all tests to 30 seconds
   jest.setTimeout(30000);
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
     // Use fake timers for all tests
     jest.useFakeTimers();
   });
-  
+
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -24,21 +24,21 @@ describe('analyze step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content for analysis',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const analyzeStep = mockAnalyze({
-      focus: 'general'
+      focus: 'general',
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.analysis).toBeDefined();
@@ -54,10 +54,10 @@ describe('analyze step', () => {
             url: 'https://example.com/1',
             title: 'Market Research',
             content: 'Content about market trends',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const analyzeStep = mockAnalyze({
@@ -67,15 +67,15 @@ describe('analyze step', () => {
         insights: ['Market trend 1', 'Market trend 2'],
         confidence: 0.9,
         supportingEvidence: ['Market evidence 1'],
-        recommendations: ['Market recommendation 1']
-      }
+        recommendations: ['Market recommendation 1'],
+      },
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     // The analysis should be stored under the specified focus key
@@ -92,10 +92,10 @@ describe('analyze step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const analyzeStep = mockAnalyze({
@@ -105,15 +105,15 @@ describe('analyze step', () => {
         focus: 'general',
         insights: ['Insight 1'],
         confidence: 0.85,
-        recommendations: ['Recommendation 1', 'Recommendation 2']
-      }
+        recommendations: ['Recommendation 1', 'Recommendation 2'],
+      },
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.analysis?.general.recommendations).toBeDefined();
@@ -128,10 +128,10 @@ describe('analyze step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content for detailed analysis',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const analyzeStep = mockAnalyze({
@@ -141,15 +141,15 @@ describe('analyze step', () => {
         focus: 'general',
         insights: ['Detailed insight 1', 'Detailed insight 2'],
         confidence: 0.9,
-        supportingEvidence: ['Detailed evidence 1', 'Detailed evidence 2']
-      }
+        supportingEvidence: ['Detailed evidence 1', 'Detailed evidence 2'],
+      },
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     // The mock implementation adds an extra insight for detailed analysis
@@ -165,10 +165,10 @@ describe('analyze step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const analyzeStep = mockAnalyze({
@@ -177,15 +177,15 @@ describe('analyze step', () => {
       mockAnalysis: {
         focus: 'general',
         insights: ['Insight 1'],
-        confidence: 0.85
-      }
+        confidence: 0.85,
+      },
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.results.length).toBeGreaterThan(0);
@@ -200,43 +200,43 @@ describe('analyze step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const analyzeStep = mockAnalyze({
       focus: 'general',
       shouldError: true,
-      errorMessage: 'Analysis failed'
+      errorMessage: 'Analysis failed',
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     await expect(resultPromise).rejects.toThrow('Analysis failed');
   });
 
   it('should handle empty content gracefully when allowEmptyContent is true', async () => {
     const initialState = createMockState({
       data: {
-        extractedContent: [] // No content to analyze
-      }
+        extractedContent: [], // No content to analyze
+      },
     });
 
     const analyzeStep = mockAnalyze({
       focus: 'general',
-      allowEmptyContent: true
+      allowEmptyContent: true,
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     // Should continue without errors and not add analysis
@@ -246,20 +246,20 @@ describe('analyze step', () => {
   it('should throw error for empty content when allowEmptyContent is false', async () => {
     const initialState = createMockState({
       data: {
-        extractedContent: [] // No content to analyze
-      }
+        extractedContent: [], // No content to analyze
+      },
     });
 
     const analyzeStep = mockAnalyze({
       focus: 'general',
-      allowEmptyContent: false
+      allowEmptyContent: false,
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     await expect(resultPromise).rejects.toThrow('No content available for analysis');
   });
 
@@ -271,10 +271,10 @@ describe('analyze step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const customAnalysis = {
@@ -282,19 +282,19 @@ describe('analyze step', () => {
       insights: ['Custom insight 1', 'Custom insight 2'],
       confidence: 0.95,
       supportingEvidence: ['Custom evidence'],
-      recommendations: ['Custom recommendation']
+      recommendations: ['Custom recommendation'],
     };
 
     const analyzeStep = mockAnalyze({
       focus: 'custom',
-      mockAnalysis: customAnalysis
+      mockAnalysis: customAnalysis,
     });
 
     const resultPromise = executeStep(analyzeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.analysis?.custom).toBeDefined();

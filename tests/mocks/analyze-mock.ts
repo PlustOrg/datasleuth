@@ -3,10 +3,10 @@
  * Mock implementation of the analyze step for testing
  * This version doesn't rely on LLMs or the AI SDK
  */
-import { createStep } from '../../src/utils/steps';
-import { ResearchState, AnalysisResult } from '../../src/types/pipeline';
-import { ConfigurationError, LLMError, ValidationError } from '../../src/types/errors';
-import { logger, createStepLogger } from '../../src/utils/logging';
+import { createStep } from '../../src/utils/steps.js';
+import { ResearchState, AnalysisResult } from '../../src/types/pipeline.js';
+import { ConfigurationError, LLMError, ValidationError } from '../../src/types/errors.js';
+import { logger, createStepLogger } from '../../src/utils/logging.js';
 
 /**
  * Mock options for the analyze step
@@ -38,7 +38,7 @@ const DEFAULT_MOCK_ANALYSIS: AnalysisResult = {
   insights: ['Key insight 1', 'Key insight 2'],
   confidence: 0.9,
   supportingEvidence: ['Evidence 1', 'Evidence 2'],
-  recommendations: ['Recommendation 1', 'Recommendation 2']
+  recommendations: ['Recommendation 1', 'Recommendation 2'],
 };
 
 /**
@@ -49,7 +49,7 @@ async function executeMockAnalyzeStep(
   options: MockAnalyzeOptions
 ): Promise<ResearchState> {
   const stepLogger = createStepLogger('Analysis');
-  
+
   const {
     focus,
     depth = 'standard',
@@ -58,7 +58,7 @@ async function executeMockAnalyzeStep(
     allowEmptyContent = false,
     shouldError = false,
     errorMessage = 'Mock analysis failure',
-    mockAnalysis = DEFAULT_MOCK_ANALYSIS
+    mockAnalysis = DEFAULT_MOCK_ANALYSIS,
   } = options;
 
   stepLogger.info(`Starting mock analysis with focus: ${focus}, depth: ${depth}`);
@@ -71,13 +71,10 @@ async function executeMockAnalyzeStep(
         step: 'Analysis',
         details: { options },
         retry: true,
-        suggestions: [
-          "This is a mock error for testing",
-          "No real LLM is being used"
-        ]
+        suggestions: ['This is a mock error for testing', 'No real LLM is being used'],
       });
     }
-    
+
     // Check if there's content to analyze
     if (!state.data.extractedContent || state.data.extractedContent.length === 0) {
       if (!allowEmptyContent) {
@@ -86,36 +83,35 @@ async function executeMockAnalyzeStep(
           step: 'Analysis',
           details: { options },
           suggestions: [
-            "Ensure the content extraction step has been executed",
-            "Check that the search results returned valid content",
-            "Use allowEmptyContent: true to continue even with no content"
-          ]
+            'Ensure the content extraction step has been executed',
+            'Check that the search results returned valid content',
+            'Use allowEmptyContent: true to continue even with no content',
+          ],
         });
       }
-      
+
       // If empty content is allowed, just return the state unchanged
       stepLogger.warn('No content available for analysis, skipping (allowEmptyContent=true)');
       return state;
     }
-    
+
     const startTime = Date.now();
-    
+
     // Use the provided mock analysis or the default one, with focus set to the provided focus
     const analysis: AnalysisResult = {
       ...mockAnalysis,
       focus: focus,
       // Adjust insights based on depth
-      insights: depth === 'basic' 
-        ? mockAnalysis.insights.slice(0, 1) 
-        : depth === 'detailed' 
-          ? [...mockAnalysis.insights, 'Additional detailed insight'] 
-          : mockAnalysis.insights,
+      insights:
+        depth === 'basic'
+          ? mockAnalysis.insights.slice(0, 1)
+          : depth === 'detailed'
+            ? [...mockAnalysis.insights, 'Additional detailed insight']
+            : mockAnalysis.insights,
       // Include or exclude recommendations based on includeRecommendations
-      recommendations: includeRecommendations 
-        ? mockAnalysis.recommendations 
-        : undefined
+      recommendations: includeRecommendations ? mockAnalysis.recommendations : undefined,
     };
-    
+
     const timeTaken = Date.now() - startTime;
     stepLogger.info(`Mock analysis generated successfully in ${timeTaken}ms`);
 
@@ -126,13 +122,13 @@ async function executeMockAnalyzeStep(
         ...state.data,
         analysis: {
           ...state.data.analysis,
-          [focus]: analysis
-        }
+          [focus]: analysis,
+        },
       },
       metadata: {
         ...state.metadata,
-        analysisTimeMs: timeTaken
-      }
+        analysisTimeMs: timeTaken,
+      },
     };
 
     // Add the analysis to results if requested
@@ -152,16 +148,16 @@ async function executeMockAnalyzeStep(
 
 /**
  * Creates a mock analyze step for testing
- * 
+ *
  * @param options Configuration options for the mock analyze step
  * @returns A mock analyze step for testing
  */
 export function mockAnalyze(options: MockAnalyzeOptions): ReturnType<typeof createStep> {
   return createStep(
-    'Analysis', 
+    'Analysis',
     async (state: ResearchState, opts?: Record<string, any>) => {
       return executeMockAnalyzeStep(state, options);
-    }, 
+    },
     options
   );
 }

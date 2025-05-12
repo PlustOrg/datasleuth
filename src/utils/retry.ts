@@ -1,5 +1,5 @@
-import { BaseResearchError } from '../types/errors';
-import { logger } from './logging';
+import { BaseResearchError } from '../types/errors.js';
+import { logger } from './logging.js';
 
 /**
  * Options for the retry mechanism
@@ -23,13 +23,13 @@ export interface RetryOptions {
 const DEFAULT_RETRY_OPTIONS: Required<Omit<RetryOptions, 'retryableErrors' | 'onRetry'>> = {
   maxRetries: 3,
   retryDelay: 1000,
-  backoffFactor: 2
+  backoffFactor: 2,
 };
 
 /**
  * Default function to determine if an error is retryable
  */
-const defaultIsRetryable = (error: unknown): boolean => 
+const defaultIsRetryable = (error: unknown): boolean =>
   error instanceof BaseResearchError && error.retry === true;
 
 /**
@@ -38,17 +38,17 @@ const defaultIsRetryable = (error: unknown): boolean =>
 const defaultOnRetry = (attempt: number, error: unknown, delay: number): void => {
   logger.warn(
     `Retry attempt ${attempt} after error: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
-    `Retrying in ${delay}ms...`
+      `Retrying in ${delay}ms...`
   );
 };
 
 /**
  * Execute a function with automatic retry for transient errors
- * 
+ *
  * This utility function wraps an asynchronous operation with retry logic that
  * can handle transient failures. It supports exponential backoff, customizable
  * retry conditions, and notifications on retry attempts.
- * 
+ *
  * @param fn - The async function to execute with retry logic
  * @param options - Retry configuration options
  * @param options.maxRetries - Maximum number of retry attempts (default: 3)
@@ -56,14 +56,14 @@ const defaultOnRetry = (attempt: number, error: unknown, delay: number): void =>
  * @param options.backoffFactor - Factor by which to increase delay on each retry (default: 2)
  * @param options.retryableErrors - Function to determine if an error is retryable
  * @param options.onRetry - Function to run before each retry attempt
- * 
+ *
  * @returns The result of the function execution
  * @throws The last error encountered if all retries fail
- * 
+ *
  * @example
  * ```typescript
  * import { executeWithRetry } from '@plust/datasleuth';
- * 
+ *
  * const result = await executeWithRetry(
  *   async () => await fetchDataFromAPI(url),
  *   {
@@ -72,7 +72,7 @@ const defaultOnRetry = (attempt: number, error: unknown, delay: number): void =>
  *     backoffFactor: 2,
  *     retryableErrors: (error) => {
  *       // Retry on network errors or rate limiting
- *       return error instanceof NetworkError || 
+ *       return error instanceof NetworkError ||
  *              (error instanceof APIError && error.status === 429);
  *     }
  *   }
@@ -91,32 +91,32 @@ export async function executeWithRetry<T>(
 
   let lastError: unknown;
   let attempt = 0;
-  
+
   // Special handling for test environment to prevent timeouts
   const shouldUseTestMode = process.env.NODE_ENV === 'test';
-  
+
   // First attempt (attempt 0)
   try {
     return await fn();
   } catch (error) {
     lastError = error;
-    
+
     // If not retryable or no retries allowed, rethrow immediately
     if (maxRetries <= 0 || !isRetryable(error)) {
       throw error;
     }
   }
-  
+
   // Start retry attempts (attempt 1 and up)
   while (attempt < maxRetries) {
     attempt++;
-    
+
     // Calculate delay with exponential backoff
     const delay = initialDelay * Math.pow(backoffFactor, attempt - 1);
-    
+
     // Notify about retry
     onRetry(attempt, lastError, delay);
-    
+
     // For test environments, we avoid actual delays and just use Promise.resolve()
     // This works better with Jest's fake timers
     if (shouldUseTestMode) {
@@ -124,25 +124,25 @@ export async function executeWithRetry<T>(
       await Promise.resolve();
     } else {
       // Use actual setTimeout for production code
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
-    
+
     try {
       return await fn();
     } catch (error) {
       lastError = error;
-      
+
       // If this error is not retryable or we've reached max retries, stop
       if (attempt >= maxRetries || !isRetryable(error)) {
         logger.debug(
           `Not retrying after error: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
-          `Reason: ${attempt >= maxRetries ? 'Max retries reached' : 'Error is not retryable'}`
+            `Reason: ${attempt >= maxRetries ? 'Max retries reached' : 'Error is not retryable'}`
         );
         throw error;
       }
     }
   }
-  
+
   // This should never be reached due to the throw in the catch block
   // but TypeScript requires a return statement
   throw lastError;
@@ -150,15 +150,15 @@ export async function executeWithRetry<T>(
 
 /**
  * Decorator function that adds retry behavior to any async function
- * 
+ *
  * @param options Retry configuration options
  * @returns A function decorator that adds retry behavior
  */
 export function withRetry(options: RetryOptions = {}) {
-  return function<T extends (...args: any[]) => Promise<any>>(
+  return function <T extends (...args: any[]) => Promise<any>>(
     target: T
-  ): ((...args: Parameters<T>) => Promise<ReturnType<T>>) {
-    return async function(...args: Parameters<T>): Promise<ReturnType<T>> {
+  ): (...args: Parameters<T>) => Promise<ReturnType<T>> {
+    return async function (...args: Parameters<T>): Promise<ReturnType<T>> {
       return executeWithRetry(() => target(...args), options);
     };
   };

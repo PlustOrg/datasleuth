@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import type { ResearchState, ResearchStep } from '../src/types/pipeline';
+import type { ResearchState, ResearchStep } from '../src/types/pipeline.js';
 import type { LanguageModel } from 'ai';
-import { generateText, generateObject } from 'ai';
 
 // No longer using ollama directly to avoid external dependencies
 // import { ollama } from 'ollama-ai-provider';
@@ -19,7 +18,7 @@ export function createMockState(overrides?: Partial<ResearchState>): ResearchSta
       searchResults: [],
       extractedContent: [],
       analysis: {},
-      summary: '',  // Changed from null to empty string
+      summary: '', // Changed from null to empty string
     },
     results: [],
     errors: [],
@@ -46,37 +45,37 @@ export function createBasicSchema() {
 
 // Default research plan object for consistent testing
 const DEFAULT_RESEARCH_PLAN = {
-  objectives: ["Objective 1", "Objective 2"],
-  searchQueries: ["Query 1", "Query 2"],
-  expectedFindings: ["Expected finding 1", "Expected finding 2"],
-  relevantFactors: ["Factor 1", "Factor 2"],
-  dataGatheringStrategy: "Test gathering strategy",
-  focusAreas: ["Area 1", "Area 2"],
-  expectedOutcomes: ["Expected outcome 1", "Expected outcome 2"]
+  objectives: ['Objective 1', 'Objective 2'],
+  searchQueries: ['Query 1', 'Query 2'],
+  expectedFindings: ['Expected finding 1', 'Expected finding 2'],
+  relevantFactors: ['Factor 1', 'Factor 2'],
+  dataGatheringStrategy: 'Test gathering strategy',
+  focusAreas: ['Area 1', 'Area 2'],
+  expectedOutcomes: ['Expected outcome 1', 'Expected outcome 2'],
 };
 
 // Default fact check object for consistent testing
 const DEFAULT_FACT_CHECK = {
-  statement: "Test statement 1",
+  statement: 'Test statement 1',
   isValid: true,
   confidence: 0.9,
-  evidence: ["Evidence for statement 1"]
+  evidence: ['Evidence for statement 1'],
 };
 
 // Default analysis object for consistent testing
 const DEFAULT_ANALYSIS = {
-  focus: "general",
-  insights: ["Key insight 1", "Key insight 2"],
+  focus: 'general',
+  insights: ['Key insight 1', 'Key insight 2'],
   confidence: 0.9,
-  supportingEvidence: ["Evidence 1", "Evidence 2"],
-  recommendations: ["Recommendation 1", "Recommendation 2"]
+  supportingEvidence: ['Evidence 1', 'Evidence 2'],
+  recommendations: ['Recommendation 1', 'Recommendation 2'],
 };
 
 // Default structured summary for consistent testing
 const DEFAULT_STRUCTURED_SUMMARY = {
-  summary: "This is a structured summary for testing",
-  keyPoints: ["Key point 1", "Key point 2"],
-  sources: ["https://example.com/1", "https://example.com/2"]
+  summary: 'This is a structured summary for testing',
+  keyPoints: ['Key point 1', 'Key point 2'],
+  sources: ['https://example.com/1', 'https://example.com/2'],
 };
 
 /**
@@ -88,18 +87,18 @@ export const mockLLM: LanguageModel = {
   modelId: 'test-model',
   defaultObjectGenerationMode: 'json',
   supportsStructuredOutputs: true,
-  
+
   doGenerate: async () => ({
     text: 'Mock LLM response',
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
-    rawCall: { rawPrompt: null, rawSettings: {} }
+    rawCall: { rawPrompt: null, rawSettings: {} },
   }),
-  
+
   doStream: async () => ({
     stream: new ReadableStream(),
-    rawCall: { rawPrompt: null, rawSettings: {} }
-  })
+    rawCall: { rawPrompt: null, rawSettings: {} },
+  }),
 };
 
 /**
@@ -111,18 +110,18 @@ export const mockPlanLLM: LanguageModel = {
   modelId: 'test-plan-model',
   defaultObjectGenerationMode: 'json',
   supportsStructuredOutputs: true,
-  
+
   doGenerate: async () => ({
     text: JSON.stringify(DEFAULT_RESEARCH_PLAN),
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
-    rawCall: { rawPrompt: null, rawSettings: {} }
+    rawCall: { rawPrompt: null, rawSettings: {} },
   }),
-  
+
   doStream: async () => ({
     stream: new ReadableStream(),
-    rawCall: { rawPrompt: null, rawSettings: {} }
-  })
+    rawCall: { rawPrompt: null, rawSettings: {} },
+  }),
 };
 
 /**
@@ -134,18 +133,18 @@ export const mockFactCheckLLM: LanguageModel = {
   modelId: 'test-factcheck-model',
   defaultObjectGenerationMode: 'json',
   supportsStructuredOutputs: true,
-  
+
   doGenerate: async () => ({
     text: JSON.stringify(DEFAULT_FACT_CHECK),
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
-    rawCall: { rawPrompt: null, rawSettings: {} }
+    rawCall: { rawPrompt: null, rawSettings: {} },
   }),
-  
+
   doStream: async () => ({
     stream: new ReadableStream(),
-    rawCall: { rawPrompt: null, rawSettings: {} }
-  })
+    rawCall: { rawPrompt: null, rawSettings: {} },
+  }),
 };
 
 /**
@@ -157,18 +156,18 @@ export const mockAnalyzeLLM: LanguageModel = {
   modelId: 'test-analyze-model',
   defaultObjectGenerationMode: 'json',
   supportsStructuredOutputs: true,
-  
+
   doGenerate: async () => ({
     text: JSON.stringify(DEFAULT_ANALYSIS),
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
-    rawCall: { rawPrompt: null, rawSettings: {} }
+    rawCall: { rawPrompt: null, rawSettings: {} },
   }),
-  
+
   doStream: async () => ({
     stream: new ReadableStream(),
-    rawCall: { rawPrompt: null, rawSettings: {} }
-  })
+    rawCall: { rawPrompt: null, rawSettings: {} },
+  }),
 };
 
 /**
@@ -180,18 +179,18 @@ export const mockSummarizeLLM: LanguageModel = {
   modelId: 'test-summarize-model',
   defaultObjectGenerationMode: 'json',
   supportsStructuredOutputs: true,
-  
+
   doGenerate: async () => ({
     text: 'This is a test summary.',
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
-    rawCall: { rawPrompt: null, rawSettings: {} }
+    rawCall: { rawPrompt: null, rawSettings: {} },
   }),
-  
+
   doStream: async () => ({
     stream: new ReadableStream(),
-    rawCall: { rawPrompt: null, rawSettings: {} }
-  })
+    rawCall: { rawPrompt: null, rawSettings: {} },
+  }),
 };
 
 /**
@@ -203,18 +202,18 @@ export const mockStructuredSummarizeLLM: LanguageModel = {
   modelId: 'test-structured-model',
   defaultObjectGenerationMode: 'json',
   supportsStructuredOutputs: true,
-  
+
   doGenerate: async () => ({
     text: JSON.stringify(DEFAULT_STRUCTURED_SUMMARY),
     finishReason: 'stop',
     usage: { promptTokens: 10, completionTokens: 20 },
-    rawCall: { rawPrompt: null, rawSettings: {} }
+    rawCall: { rawPrompt: null, rawSettings: {} },
   }),
-  
+
   doStream: async () => ({
     stream: new ReadableStream(),
-    rawCall: { rawPrompt: null, rawSettings: {} }
-  })
+    rawCall: { rawPrompt: null, rawSettings: {} },
+  }),
 };
 
 /**
@@ -226,50 +225,50 @@ export const mockErrorLLM: LanguageModel = {
   modelId: 'test-error-model',
   defaultObjectGenerationMode: 'json',
   supportsStructuredOutputs: true,
-  
+
   doGenerate: async () => {
     throw new Error('LLM failure');
   },
-  
+
   doStream: async () => {
     throw new Error('LLM failure');
-  }
+  },
 };
 
 // Mock the generateText and generateObject functions from the ai package
 jest.mock('ai', () => {
   const originalModule = jest.requireActual('ai');
-  
+
   // Define standard mock responses for consistent testing
   const DEFAULT_RESEARCH_PLAN = {
-    objectives: ["Objective 1", "Objective 2"],
-    searchQueries: ["Query 1", "Query 2"],
-    relevantFactors: ["Factor 1", "Factor 2"],
-    dataGatheringStrategy: "Test gathering strategy",
-    expectedOutcomes: ["Expected outcome 1", "Expected outcome 2"]
+    objectives: ['Objective 1', 'Objective 2'],
+    searchQueries: ['Query 1', 'Query 2'],
+    relevantFactors: ['Factor 1', 'Factor 2'],
+    dataGatheringStrategy: 'Test gathering strategy',
+    expectedOutcomes: ['Expected outcome 1', 'Expected outcome 2'],
   };
-  
+
   const DEFAULT_FACT_CHECK = {
-    statement: "Test statement 1",
+    statement: 'Test statement 1',
     isValid: true,
     confidence: 0.9,
-    evidence: ["Evidence for statement 1"]
+    evidence: ['Evidence for statement 1'],
   };
-  
+
   const DEFAULT_ANALYSIS = {
-    focus: "general",
-    insights: ["Key insight 1", "Key insight 2"],
+    focus: 'general',
+    insights: ['Key insight 1', 'Key insight 2'],
     confidence: 0.9,
-    supportingEvidence: ["Evidence 1", "Evidence 2"],
-    recommendations: ["Recommendation 1", "Recommendation 2"]
+    supportingEvidence: ['Evidence 1', 'Evidence 2'],
+    recommendations: ['Recommendation 1', 'Recommendation 2'],
   };
-  
+
   const DEFAULT_STRUCTURED_SUMMARY = {
-    summary: "This is a structured summary for testing",
-    keyPoints: ["Key point 1", "Key point 2"],
-    sources: ["https://example.com/1", "https://example.com/2"]
+    summary: 'This is a structured summary for testing',
+    keyPoints: ['Key point 1', 'Key point 2'],
+    sources: ['https://example.com/1', 'https://example.com/2'],
   };
-  
+
   return {
     ...originalModule,
     generateText: jest.fn().mockImplementation(async ({ model, prompt, system }) => {
@@ -277,136 +276,150 @@ jest.mock('ai', () => {
       if (model === mockErrorLLM) {
         throw new Error('LLM failure');
       }
-      
+
       // For plan testing
-      if (model === mockPlanLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('research plan'))) {
+      if (
+        model === mockPlanLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('research plan'))
+      ) {
         return {
           text: JSON.stringify(DEFAULT_RESEARCH_PLAN),
           usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         };
       }
-      
+
       // For fact check testing
-      if (model === mockFactCheckLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('fact check'))) {
+      if (
+        model === mockFactCheckLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('fact check'))
+      ) {
         return {
           text: JSON.stringify(DEFAULT_FACT_CHECK),
           usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         };
       }
-      
+
       // For analysis testing
-      if (model === mockAnalyzeLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('analyze'))) {
+      if (
+        model === mockAnalyzeLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('analyze'))
+      ) {
         return {
           text: JSON.stringify(DEFAULT_ANALYSIS),
           usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         };
       }
-      
+
       // For summarize testing
-      if (model === mockSummarizeLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('summarize'))) {
+      if (
+        model === mockSummarizeLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('summarize'))
+      ) {
         if (prompt && typeof prompt === 'string' && prompt.includes('structured')) {
           return {
             text: JSON.stringify(DEFAULT_STRUCTURED_SUMMARY),
             usage: { promptTokens: 10, completionTokens: 20 },
-            finishReason: 'stop'
+            finishReason: 'stop',
           };
         }
-        
+
         return {
           text: 'This is a test summary.',
           usage: { promptTokens: 10, completionTokens: 20 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         };
       }
-      
+
       // Default response
       return {
         text: 'Mock LLM response',
         usage: { promptTokens: 10, completionTokens: 20 },
-        finishReason: 'stop'
+        finishReason: 'stop',
       };
     }),
-    
+
     generateObject: jest.fn().mockImplementation(async ({ model, schema, prompt, system }) => {
       // Explicit error case
       if (model === mockErrorLLM) {
         throw new Error('LLM failure');
       }
-      
+
       // Research plan case - used by our plan.ts file
-      if (model === mockPlanLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('research plan')) ||
-          (schema && schema.shape && 'objectives' in schema.shape)) {
-        
+      if (
+        model === mockPlanLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('research plan')) ||
+        (schema && schema.shape && 'objectives' in schema.shape)
+      ) {
         return {
           object: {
-            objectives: ["Objective 1", "Objective 2"],
-            searchQueries: ["Query 1", "Query 2"],
-            relevantFactors: ["Factor 1", "Factor 2"],
-            dataGatheringStrategy: "Test gathering strategy",
-            expectedOutcomes: ["Expected outcome 1", "Expected outcome 2"]
-          }
+            objectives: ['Objective 1', 'Objective 2'],
+            searchQueries: ['Query 1', 'Query 2'],
+            relevantFactors: ['Factor 1', 'Factor 2'],
+            dataGatheringStrategy: 'Test gathering strategy',
+            expectedOutcomes: ['Expected outcome 1', 'Expected outcome 2'],
+          },
         };
       }
-      
+
       // Fact check case
-      if (model === mockFactCheckLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('fact check')) ||
-          (schema && schema.shape && 'isValid' in schema.shape)) {
-        
+      if (
+        model === mockFactCheckLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('fact check')) ||
+        (schema && schema.shape && 'isValid' in schema.shape)
+      ) {
         return {
-          object: DEFAULT_FACT_CHECK
+          object: DEFAULT_FACT_CHECK,
         };
       }
-      
+
       // Analysis case
-      if (model === mockAnalyzeLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('analyze')) ||
-          (schema && schema.shape && 'insights' in schema.shape)) {
-        
+      if (
+        model === mockAnalyzeLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('analyze')) ||
+        (schema && schema.shape && 'insights' in schema.shape)
+      ) {
         return {
-          object: DEFAULT_ANALYSIS 
+          object: DEFAULT_ANALYSIS,
         };
       }
-      
+
       // Summarize case
-      if (model === mockSummarizeLLM || 
-          model === mockStructuredSummarizeLLM || 
-          (prompt && typeof prompt === 'string' && prompt.includes('summarize'))) {
-        
-        if (model === mockStructuredSummarizeLLM || 
-            (prompt && typeof prompt === 'string' && prompt.includes('structured'))) {
+      if (
+        model === mockSummarizeLLM ||
+        model === mockStructuredSummarizeLLM ||
+        (prompt && typeof prompt === 'string' && prompt.includes('summarize'))
+      ) {
+        if (
+          model === mockStructuredSummarizeLLM ||
+          (prompt && typeof prompt === 'string' && prompt.includes('structured'))
+        ) {
           return {
-            object: DEFAULT_STRUCTURED_SUMMARY
+            object: DEFAULT_STRUCTURED_SUMMARY,
           };
         }
-        
+
         return {
-          object: 'This is a test summary.'
+          object: 'This is a test summary.',
         };
       }
-      
+
       // Default fallback
       return {
         object: {
-          key: "value",
-          nested: { property: "test" },
-          array: [1, 2, 3]
-        }
+          key: 'value',
+          nested: { property: 'test' },
+          array: [1, 2, 3],
+        },
       };
-    })
+    }),
   };
 });
 
 /**
- * Mock search provider for testing 
+ * Mock search provider for testing
  */
 export const mockSearchProvider = {
   name: 'mock-search',
@@ -416,21 +429,17 @@ export const mockSearchProvider = {
     if (options && options.query && options.query.includes('Search API failure')) {
       throw new Error('Search API failure');
     }
-    
+
     // For search query specific tests
     if (options && options.query) {
       if (options.query === 'query from plan 1') {
-        return [
-          { title: 'Result 1', url: 'https://example.com/1', snippet: 'This is result 1' }
-        ];
+        return [{ title: 'Result 1', url: 'https://example.com/1', snippet: 'This is result 1' }];
       }
       if (options.query === 'query from plan 2') {
-        return [
-          { title: 'Result 2', url: 'https://example.com/2', snippet: 'This is result 2' }
-        ];
+        return [{ title: 'Result 2', url: 'https://example.com/2', snippet: 'This is result 2' }];
       }
     }
-    
+
     // Default results for most tests
     return [
       { title: 'Result 1', url: 'https://example.com/1', snippet: 'This is result 1' },
@@ -443,7 +452,7 @@ export const mockSearchProvider = {
  * Utility to execute a pipeline step and return the updated state
  */
 export async function executeStep(
-  step: ResearchStep, 
+  step: ResearchStep,
   initialState: ResearchState = createMockState()
 ): Promise<ResearchState> {
   return await step.execute(initialState);
@@ -455,17 +464,17 @@ export async function executeStep(
 export function captureConsoleOutput() {
   const logs: string[] = [];
   const originalConsoleLog = console.log;
-  
+
   beforeEach(() => {
     console.log = jest.fn((...args) => {
-      logs.push(args.map(arg => String(arg)).join(' '));
+      logs.push(args.map((arg) => String(arg)).join(' '));
     });
   });
-  
+
   afterEach(() => {
     console.log = originalConsoleLog;
     logs.length = 0;
   });
-  
+
   return () => [...logs];
 }

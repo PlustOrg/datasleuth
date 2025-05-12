@@ -2,17 +2,17 @@
  * Web search step for the research pipeline
  * Uses @plust/search-sdk to perform web searches
  */
-import { webSearch as performWebSearch, SearchProvider as SDKSearchProvider, SearchResult as SDKSearchResult, WebSearchOptions as SDKWebSearchOptions } from '@plust/search-sdk';
-import { createStep } from '../utils/steps';
-import { ResearchState, SearchResult as StateSearchResult } from '../types/pipeline';
+import {
+  webSearch as performWebSearch,
+  SearchProvider as SDKSearchProvider,
+  SearchResult as SDKSearchResult,
+  WebSearchOptions as SDKWebSearchOptions,
+} from '@plust/search-sdk';
+import { createStep } from '../utils/steps.js';
+import { ResearchState, SearchResult as StateSearchResult } from '../types/pipeline.js';
 import { z } from 'zod';
-import { 
-  SearchError, 
-  NetworkError, 
-  ConfigurationError,
-  ValidationError
-} from '../types/errors';
-import { logger, createStepLogger } from '../utils/logging';
+import { SearchError, NetworkError, ConfigurationError, ValidationError } from '../types/errors.js';
+import { logger, createStepLogger } from '../utils/logging.js';
 
 // Schema for search result
 const searchResultSchema = z.object({
@@ -46,7 +46,7 @@ export interface SearchProviderConfig {
  */
 export interface WebSearchOptions {
   /** Search provider configured from @plust/search-sdk */
-  provider: SDKSearchProvider | SearchProviderConfig;
+  provider?: SDKSearchProvider | SearchProviderConfig;
   /** Optional custom query override (if not provided, will use the main research query) */
   query?: string;
   /** Maximum number of results to return */
@@ -77,22 +77,22 @@ function ensureSDKProvider(provider: SDKSearchProvider | SearchProviderConfig): 
     // It's already a proper SDK provider
     return provider as SDKSearchProvider;
   }
-  
+
   // It's our config format, create a mock SDK provider
   const config = provider as SearchProviderConfig;
-  
+
   if (!config.apiKey) {
     throw new ConfigurationError({
       message: `Missing API key for search provider "${config.name}"`,
       step: 'WebSearch',
       suggestions: [
-        "Provide an API key in the provider configuration",
-        "Check environment variables for API keys",
-        "Use a different search provider with valid credentials"
-      ]
+        'Provide an API key in the provider configuration',
+        'Check environment variables for API keys',
+        'Use a different search provider with valid credentials',
+      ],
     });
   }
-  
+
   // Create a minimal compatible provider
   return {
     name: config.name,
@@ -100,14 +100,14 @@ function ensureSDKProvider(provider: SDKSearchProvider | SearchProviderConfig): 
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       // Spread the rest of the config properties except those already specified
-      ...(({ apiKey, name, ...rest }) => rest)(config)
+      ...(({ apiKey, name, ...rest }) => rest)(config),
     },
     search: async (options) => {
       // This is just a placeholder to satisfy the type system
       // The actual search will be performed by the SDK functions
       logger.warn('Mock provider search called - this should not happen in production');
       return [] as SDKSearchResult[];
-    }
+    },
   };
 }
 
@@ -115,14 +115,14 @@ function ensureSDKProvider(provider: SDKSearchProvider | SearchProviderConfig): 
  * Convert SDK search results to our internal format
  */
 function convertSearchResults(sdkResults: SDKSearchResult[]): StateSearchResult[] {
-  return sdkResults.map(result => ({
+  return sdkResults.map((result) => ({
     url: result.url,
     title: result.title,
     snippet: result.snippet,
     domain: result.domain,
     publishedDate: result.publishedDate,
     provider: result.provider,
-    raw: result.raw ? result.raw as Record<string, any> : undefined
+    raw: result.raw ? (result.raw as Record<string, any>) : undefined,
   }));
 }
 
@@ -132,29 +132,29 @@ function convertSearchResults(sdkResults: SDKSearchResult[]): StateSearchResult[
 function validateQuery(query: string): string {
   // Remove any potentially problematic characters and excessive whitespace
   const cleanedQuery = query.trim();
-  
+
   if (!cleanedQuery) {
     throw new ValidationError({
       message: 'Invalid search query: Empty or whitespace only',
       step: 'WebSearch',
       suggestions: [
-        "Provide a non-empty search query",
-        "Check if query generation is functioning correctly"
-      ]
+        'Provide a non-empty search query',
+        'Check if query generation is functioning correctly',
+      ],
     });
   }
-  
+
   if (cleanedQuery.length > 2000) {
     throw new ValidationError({
       message: `Search query too long (${cleanedQuery.length} chars)`,
       step: 'WebSearch',
       suggestions: [
-        "Shorten the search query to under 2000 characters",
-        "Split long queries into multiple smaller queries"
-      ]
+        'Shorten the search query to under 2000 characters',
+        'Split long queries into multiple smaller queries',
+      ],
     });
   }
-  
+
   return cleanedQuery;
 }
 
@@ -166,9 +166,9 @@ async function executeWebSearchStep(
   options: WebSearchOptions
 ): Promise<ResearchState> {
   const stepLogger = createStepLogger('WebSearch');
-  
+
   const {
-    provider,
+    provider: optionsProvider,
     query: customQuery,
     maxResults = 10,
     language,
@@ -177,32 +177,48 @@ async function executeWebSearchStep(
     useQueriesFromPlan = true,
     includeRawResults = false,
     includeInResults = false,
-    requireResults = false
+    requireResults = false,
   } = options;
 
   stepLogger.info('Starting web search execution');
-  
+
   try {
+    // Determine which provider to use - first check options, then state's defaultSearchProvider
+    const provider = optionsProvider || state.defaultSearchProvider;
+
+    // Verify that we have a provider to use
+    if (!provider) {
+      throw new ConfigurationError({
+        message: 'No search provider specified for web search',
+        step: 'WebSearch',
+        suggestions: [
+          'Provide a search provider in the searchWeb options',
+          'Set a defaultSearchProvider in the research function',
+          'Example: research({ query, outputSchema, defaultSearchProvider: google.configure({...}) })',
+        ],
+      });
+    }
+
     // Determine which queries to use
     let queries: string[] = [];
-    
+
     if (customQuery) {
       // If a custom query is provided, use it
       queries.push(validateQuery(customQuery));
     } else if (useQueriesFromPlan && state.data.researchPlan?.searchQueries) {
       // Use queries from research plan if available and option is enabled
       const planQueries = state.data.researchPlan.searchQueries;
-      
+
       // Handle the case where searchQueries might be a single string or an array
       if (Array.isArray(planQueries)) {
-        queries = planQueries.map(q => validateQuery(q)).filter(Boolean);
+        queries = planQueries.map((q) => validateQuery(q)).filter(Boolean);
       } else if (typeof planQueries === 'string') {
         queries = [validateQuery(planQueries)];
       }
-      
+
       stepLogger.debug(`Using ${queries.length} queries from research plan`);
     }
-    
+
     // If we still don't have any valid queries, use the main research query
     if (queries.length === 0) {
       queries = [validateQuery(state.query)];
@@ -223,23 +239,23 @@ async function executeWebSearchStep(
         step: 'WebSearch',
         details: { error },
         suggestions: [
-          "Check provider name and API key",
+          'Check provider name and API key',
           "Ensure you're using a supported search provider",
-          "Verify the structure of your provider configuration"
-        ]
+          'Verify the structure of your provider configuration',
+        ],
       });
     }
 
     // Collect all search results
     const allResults: StateSearchResult[] = [];
     const errors: Error[] = [];
-    
+
     // Track successful searches
     let successfulSearches = 0;
-    
+
     // Execute each search query
     stepLogger.info(`Executing ${queries.length} search queries`);
-    
+
     for (const query of queries) {
       try {
         const searchParams: SDKWebSearchOptions = {
@@ -248,15 +264,15 @@ async function executeWebSearchStep(
           language,
           region,
           safeSearch,
-          provider: sdkProvider
+          provider: sdkProvider,
         };
-        
+
         stepLogger.debug(`Searching for: "${query}"`);
         const searchResults = await performWebSearch(searchParams);
-        
+
         // Convert SDK results to our internal format
         const convertedResults = convertSearchResults(searchResults);
-        
+
         if (convertedResults.length > 0) {
           successfulSearches++;
           stepLogger.info(`Query "${query}" returned ${convertedResults.length} results`);
@@ -268,7 +284,7 @@ async function executeWebSearchStep(
         // Format the error but continue with other queries
         const errorMessage = error instanceof Error ? error.message : String(error);
         stepLogger.error(`Search failed for query "${query}": ${errorMessage}`);
-        
+
         // Add structured error for debugging
         if (error instanceof Error) {
           errors.push(error);
@@ -285,17 +301,17 @@ async function executeWebSearchStep(
         throw new SearchError({
           message: 'No search results found for any queries',
           step: 'WebSearch',
-          details: { 
+          details: {
             queries,
-            errors: errors.map(e => e.message)
+            errors: errors.map((e) => e.message),
           },
           retry: true,
           suggestions: [
-            "Try different search queries",
-            "Check if the search provider is working correctly",
-            "Verify API keys and rate limits",
-            "Consider using a different search provider"
-          ]
+            'Try different search queries',
+            'Check if the search provider is working correctly',
+            'Verify API keys and rate limits',
+            'Consider using a different search provider',
+          ],
         });
       } else {
         // Otherwise just log a warning
@@ -305,19 +321,23 @@ async function executeWebSearchStep(
 
     // Deduplicate results by URL
     const uniqueResults = allResults.filter(
-      (result, index, self) => index === self.findIndex(r => r.url === result.url)
+      (result, index, self) => index === self.findIndex((r) => r.url === result.url)
     );
-    stepLogger.debug(`Deduplicated ${allResults.length} results to ${uniqueResults.length} unique URLs`);
+    stepLogger.debug(
+      `Deduplicated ${allResults.length} results to ${uniqueResults.length} unique URLs`
+    );
 
     // Limit to maxResults
     const limitedResults = uniqueResults.slice(0, maxResults);
     if (uniqueResults.length > maxResults) {
-      stepLogger.debug(`Limited to ${maxResults} results (dropped ${uniqueResults.length - maxResults})`);
+      stepLogger.debug(
+        `Limited to ${maxResults} results (dropped ${uniqueResults.length - maxResults})`
+      );
     }
 
     // Remove raw property if not needed
     if (!includeRawResults) {
-      limitedResults.forEach(result => {
+      limitedResults.forEach((result) => {
         delete result.raw;
       });
     }
@@ -336,8 +356,8 @@ async function executeWebSearchStep(
           totalQueries: queries.length,
           provider: sdkProvider.name,
           timestamp: new Date().toISOString(),
-          ...(errors.length > 0 ? { errors: errors.map(e => e.message) } : {})
-        }
+          ...(errors.length > 0 ? { errors: errors.map((e) => e.message) } : {}),
+        },
       },
     };
 
@@ -352,7 +372,11 @@ async function executeWebSearchStep(
     return newState;
   } catch (error: unknown) {
     // Handle different error types
-    if (error instanceof ConfigurationError || error instanceof ValidationError || error instanceof SearchError) {
+    if (
+      error instanceof ConfigurationError ||
+      error instanceof ValidationError ||
+      error instanceof SearchError
+    ) {
       // These are already properly formatted, just throw them
       throw error;
     } else if (error instanceof Error && error.message.includes('network')) {
@@ -363,10 +387,10 @@ async function executeWebSearchStep(
         details: { originalError: error },
         retry: true,
         suggestions: [
-          "Check your internet connection",
+          'Check your internet connection',
           "Verify the search provider's API endpoint is accessible",
-          "Try again later if this might be a temporary issue"
-        ]
+          'Try again later if this might be a temporary issue',
+        ],
       });
     } else {
       // Generic error handling
@@ -376,11 +400,11 @@ async function executeWebSearchStep(
         details: { originalError: error },
         retry: true,
         suggestions: [
-          "Check search provider configuration",
-          "Verify API key is valid and has sufficient permissions",
-          "Check query format and content",
-          "Inspect the error details for more specific guidance"
-        ]
+          'Check search provider configuration',
+          'Verify API key is valid and has sufficient permissions',
+          'Check query format and content',
+          'Inspect the error details for more specific guidance',
+        ],
       });
     }
   }
@@ -388,24 +412,45 @@ async function executeWebSearchStep(
 
 /**
  * Creates a web search step for the research pipeline
- * 
+ *
+ * This step will use either the provider specified in options or fall back to the defaultSearchProvider
+ * from the research state. At least one of these must be provided for the step to work.
+ *
  * @param options Configuration options for the web search
  * @returns A web search step for the research pipeline
+ *
+ * @example
+ * ```typescript
+ * // Using a specific provider in options
+ * searchWeb({
+ *   provider: google.configure({
+ *     apiKey: process.env.GOOGLE_API_KEY,
+ *     cx: process.env.GOOGLE_CX
+ *   }),
+ *   maxResults: 10
+ * })
+ *
+ * // Or relying on the defaultSearchProvider from the research function
+ * searchWeb({
+ *   maxResults: 10,
+ *   useQueriesFromPlan: true
+ * })
+ * ```
  */
 export function searchWeb(options: WebSearchOptions): ReturnType<typeof createStep> {
   return createStep(
-    'WebSearch', 
+    'WebSearch',
     // Wrapper function that matches the expected signature
     async (state: ResearchState, opts?: Record<string, any>) => {
       return executeWebSearchStep(state, options);
-    }, 
+    },
     options,
     {
       // Mark as retryable by default
       retryable: true,
       maxRetries: options.maxRetries || 3,
       retryDelay: 2000,
-      backoffFactor: 2
+      backoffFactor: 2,
     }
   );
 }

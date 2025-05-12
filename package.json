@@ -1,6 +1,6 @@
 {
   "name": "@plust/datasleuth",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "Deep research tool for gathering and synthesizing information with AI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -120,7 +120,18 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "transform": {
-      "^.+\\.tsx?$": "ts-jest"
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "useESM": true
+        }
+      ]
+    },
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
     }
   }
 }

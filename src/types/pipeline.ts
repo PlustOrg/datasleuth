@@ -4,8 +4,8 @@
 
 import { z } from 'zod';
 import { LanguageModel } from 'ai';
-import { LogLevel } from '../utils/logging';
-import { BaseResearchError } from './errors';
+import { LogLevel } from '../utils/logging.js';
+import { BaseResearchError } from './errors.js';
 
 /**
  * Base interface for research data objects
@@ -170,6 +170,8 @@ export interface ResearchState {
   errors: (Error | BaseResearchError)[];
   /** Default language model to use if not specified in a step */
   defaultLLM?: LanguageModel;
+  /** Default search provider to use if not specified in a step */
+  defaultSearchProvider?: any;
   metadata: {
     startTime: Date;
     endTime?: Date;
@@ -279,6 +281,8 @@ export interface ResearchInput {
   config?: Partial<PipelineConfig>;
   /** Default language model to use for LLM-dependent steps */
   defaultLLM?: LanguageModel;
+  /** Default search provider to use for search-dependent steps */
+  defaultSearchProvider?: any;
 }
 
 /**

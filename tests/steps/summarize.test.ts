@@ -7,7 +7,7 @@ describe('summarize step', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
   });
-  
+
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -20,19 +20,19 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content for summary',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const summarizeStep = mockSummarize();
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.summary).toBeDefined();
@@ -47,21 +47,21 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content for structured summary',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const summarizeStep = mockSummarize({
-      format: 'structured'
+      format: 'structured',
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.summary).toBeDefined();
@@ -79,24 +79,25 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content for summary with length limit',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const maxLength = 20;
     const summarizeStep = mockSummarize({
       maxLength,
       // Provide a longer mock summary to test truncation
-      mockSummary: 'This is a very long summary that should be truncated because it exceeds the maximum length'
+      mockSummary:
+        'This is a very long summary that should be truncated because it exceeds the maximum length',
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.summary).toBeDefined();
@@ -112,21 +113,21 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content for results inclusion',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const summarizeStep = mockSummarize({
-      includeInResults: true
+      includeInResults: true,
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.results.length).toBeGreaterThan(0);
@@ -141,22 +142,22 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
-        ]
+            extractionDate: new Date().toISOString(),
+          },
+        ],
       },
-      results: [] // Explicitly empty results
+      results: [], // Explicitly empty results
     });
 
     const summarizeStep = mockSummarize({
-      includeInResults: false
+      includeInResults: false,
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all pending timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.results.length).toBe(0);
@@ -170,33 +171,33 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
+            extractionDate: new Date().toISOString(),
+          },
         ],
         factChecks: [
           {
             statement: 'Verified fact 1',
             isValid: true,
-            confidence: 0.9
+            confidence: 0.9,
           },
           {
             statement: 'Disputed claim',
             isValid: false,
-            confidence: 0.8
-          }
-        ]
-      }
+            confidence: 0.8,
+          },
+        ],
+      },
     });
 
     const summarizeStep = mockSummarize({
-      factsOnly: true
+      factsOnly: true,
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.summary).toBeDefined();
@@ -214,41 +215,41 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const summarizeStep = mockSummarize({
       shouldError: true,
-      errorMessage: 'Summarization failed'
+      errorMessage: 'Summarization failed',
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all timers
     jest.runAllTimers();
-    
+
     await expect(resultPromise).rejects.toThrow('Summarization failed');
   });
 
   it('should handle empty content gracefully when allowEmptyContent is true', async () => {
     const initialState = createMockState({
       data: {
-        extractedContent: [] // No content to summarize
-      }
+        extractedContent: [], // No content to summarize
+      },
     });
 
     const summarizeStep = mockSummarize({
-      allowEmptyContent: true
+      allowEmptyContent: true,
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     // Should continue without errors and not add summary
@@ -258,19 +259,19 @@ describe('summarize step', () => {
   it('should throw error for empty content when allowEmptyContent is false', async () => {
     const initialState = createMockState({
       data: {
-        extractedContent: [] // No content to summarize
-      }
+        extractedContent: [], // No content to summarize
+      },
     });
 
     const summarizeStep = mockSummarize({
-      allowEmptyContent: false
+      allowEmptyContent: false,
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all timers
     jest.runAllTimers();
-    
+
     await expect(resultPromise).rejects.toThrow('No content available for summarization');
   });
 
@@ -282,23 +283,23 @@ describe('summarize step', () => {
             url: 'https://example.com/1',
             title: 'Test article',
             content: 'Test content',
-            extractionDate: new Date().toISOString()
-          }
-        ]
-      }
+            extractionDate: new Date().toISOString(),
+          },
+        ],
+      },
     });
 
     const customSummary = 'This is a custom summary provided for testing';
 
     const summarizeStep = mockSummarize({
-      mockSummary: customSummary
+      mockSummary: customSummary,
     });
 
     const resultPromise = executeStep(summarizeStep, initialState);
-    
+
     // Run all timers
     jest.runAllTimers();
-    
+
     const updatedState = await resultPromise;
 
     expect(updatedState.data.summary).toBe(customSummary);

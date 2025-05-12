@@ -1,6 +1,9 @@
 # @plust/datasleuth
 
-A powerful deep research tool for gathering and synthesizing information with AI. This package enables developers to perform comprehensive research on any topic with a simple functional API, returning structured results based on a specified schema.
+A powerful deep research tool for gathering and synthesizing information with
+AI. This package enables developers to perform comprehensive research on any
+topic with a simple functional API, returning structured results based on a
+specified schema.
 
 ![npm version](https://img.shields.io/npm/v/@plust/datasleuth)
 ![license](https://img.shields.io/npm/l/@plust/datasleuth)
@@ -34,14 +37,18 @@ npm install @plust/datasleuth
 
 ## Key Features
 
-- 🔍 **Comprehensive Research**: Go beyond simple searches with intelligent research pipelines
-- 🤖 **AI-Powered Planning**: Automatically generate research plans and strategies
+- 🔍 **Comprehensive Research**: Go beyond simple searches with intelligent
+  research pipelines
+- 🤖 **AI-Powered Planning**: Automatically generate research plans and
+  strategies
 - 🌐 **Web Integration**: Connect to search engines and content sources
 - 📊 **Deep Analysis**: Extract and analyze information with AI
 - 🔄 **Adaptive Research**: Refine queries and follow leads with feedback loops
-- 📚 **Structured Results**: Get consistently formatted data with schema validation
+- 📚 **Structured Results**: Get consistently formatted data with schema
+  validation
 - 🔧 **Extensible Architecture**: Build custom research steps and tools
-- 🧠 **Multiple LLM Support**: Integrate with any AI provider through Vercel AI SDK
+- 🧠 **Multiple LLM Support**: Integrate with any AI provider through Vercel AI
+  SDK
 - 🚀 **Parallel Processing**: Run multiple research tracks concurrently
 - 🔍 **Fact Checking**: Validate findings with AI-powered verification
 - 📈 **Entity Analysis**: Classify and cluster entities in research data
@@ -57,14 +64,14 @@ import { openai } from '@ai-sdk/openai';
 const outputSchema = z.object({
   summary: z.string(),
   keyFindings: z.array(z.string()),
-  sources: z.array(z.string().url())
+  sources: z.array(z.string().url()),
 });
 
 // Execute research
 const results = await research({
-  query: "Latest advancements in quantum computing",
+  query: 'Latest advancements in quantum computing',
   outputSchema,
-  defaultLLM: openai('gpt-4o')
+  defaultLLM: openai('gpt-4o'),
 });
 
 console.log(results);
@@ -85,14 +92,14 @@ import { openai } from '@ai-sdk/openai';
 const outputSchema = z.object({
   summary: z.string(),
   keyFindings: z.array(z.string()),
-  sources: z.array(z.string().url())
+  sources: z.array(z.string().url()),
 });
 
 // Execute research with default pipeline
 const results = await research({
-  query: "Latest advancements in quantum computing",
+  query: 'Latest advancements in quantum computing',
   outputSchema,
-  defaultLLM: openai('gpt-4o')
+  defaultLLM: openai('gpt-4o'),
 });
 ```
 
@@ -101,13 +108,13 @@ const results = await research({
 For more control, configure a custom pipeline with specific steps:
 
 ```typescript
-import { 
-  research, 
-  plan, 
-  searchWeb, 
-  extractContent, 
-  evaluate, 
-  repeatUntil 
+import {
+  research,
+  plan,
+  searchWeb,
+  extractContent,
+  evaluate,
+  repeatUntil,
 } from '@plust/datasleuth';
 import { z } from 'zod';
 import { google } from '@plust/search-sdk';
@@ -116,7 +123,7 @@ import { openai } from '@ai-sdk/openai';
 // Configure a search provider
 const googleSearch = google.configure({
   apiKey: process.env.GOOGLE_API_KEY,
-  cx: process.env.GOOGLE_CX
+  cx: process.env.GOOGLE_CX,
 });
 
 // Define complex output schema
@@ -124,45 +131,53 @@ const outputSchema = z.object({
   summary: z.string(),
   threats: z.array(z.string()),
   opportunities: z.array(z.string()),
-  timeline: z.array(z.object({
-    year: z.number(),
-    event: z.string()
-  })),
-  sources: z.array(z.object({
-    url: z.string().url(),
-    reliability: z.number().min(0).max(1)
-  }))
+  timeline: z.array(
+    z.object({
+      year: z.number(),
+      event: z.string(),
+    })
+  ),
+  sources: z.array(
+    z.object({
+      url: z.string().url(),
+      reliability: z.number().min(0).max(1),
+    })
+  ),
 });
 
 // Execute research with custom pipeline steps
 const results = await research({
-  query: "Impact of climate change on agriculture",
+  query: 'Impact of climate change on agriculture',
   outputSchema,
   steps: [
     plan({ llm: openai('gpt-4o') }),
     searchWeb({ provider: googleSearch, maxResults: 10 }),
     extractContent({ selector: 'article, .content, main' }),
-    repeatUntil(
-      evaluate({ criteriaFn: (data) => data.sources.length > 15 }),
-      [
-        searchWeb({ provider: googleSearch }),
-        extractContent()
-      ]
-    )
+    repeatUntil(evaluate({ criteriaFn: (data) => data.sources.length > 15 }), [
+      searchWeb({ provider: googleSearch }),
+      extractContent(),
+    ]),
   ],
   config: {
     errorHandling: 'continue',
-    timeout: 60000 // 1 minute
-  }
+    timeout: 60000, // 1 minute
+  },
 });
 ```
 
 ### LLM Integration with Vercel AI SDK
 
-@plust/datasleuth seamlessly integrates with the Vercel AI SDK, allowing you to use any supported LLM provider:
+@plust/datasleuth seamlessly integrates with the Vercel AI SDK, allowing you to
+use any supported LLM provider:
 
 ```typescript
-import { research, plan, analyze, factCheck, summarize } from '@plust/datasleuth';
+import {
+  research,
+  plan,
+  analyze,
+  factCheck,
+  summarize,
+} from '@plust/datasleuth';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
@@ -171,46 +186,48 @@ import { anthropic } from '@ai-sdk/anthropic';
 const outputSchema = z.object({
   summary: z.string(),
   analysis: z.object({
-    insights: z.array(z.string())
+    insights: z.array(z.string()),
   }),
-  factChecks: z.array(z.object({
-    statement: z.string(),
-    isValid: z.boolean()
-  }))
+  factChecks: z.array(
+    z.object({
+      statement: z.string(),
+      isValid: z.boolean(),
+    })
+  ),
 });
 
 // Use different LLM providers for different steps
 const results = await research({
-  query: "Advancements in gene editing technologies",
+  query: 'Advancements in gene editing technologies',
   outputSchema,
   steps: [
     // Use OpenAI for research planning
-    plan({ 
+    plan({
       llm: openai('gpt-4o'),
-      temperature: 0.4
+      temperature: 0.4,
     }),
-    
+
     // Use Anthropic for specialized analysis
     analyze({
       llm: anthropic('claude-3-opus-20240229'),
       focus: 'ethical-considerations',
-      depth: 'comprehensive'
+      depth: 'comprehensive',
     }),
-    
+
     // Use OpenAI for fact checking
     factCheck({
       llm: openai('gpt-4o'),
       threshold: 0.8,
-      includeEvidence: true
+      includeEvidence: true,
     }),
-    
+
     // Use Anthropic for final summarization
     summarize({
       llm: anthropic('claude-3-sonnet-20240229'),
       format: 'structured',
-      maxLength: 2000
-    })
-  ]
+      maxLength: 2000,
+    }),
+  ],
 });
 ```
 
@@ -219,14 +236,14 @@ const results = await research({
 Run multiple research tracks concurrently and merge the results:
 
 ```typescript
-import { 
-  research, 
-  track, 
-  parallel, 
-  searchWeb, 
-  extractContent, 
-  analyze, 
-  ResultMerger 
+import {
+  research,
+  track,
+  parallel,
+  searchWeb,
+  extractContent,
+  analyze,
+  ResultMerger,
 } from '@plust/datasleuth';
 import { z } from 'zod';
 import { google, bing } from '@plust/search-sdk';
@@ -239,17 +256,19 @@ const bingSearch = bing.configure({ apiKey: process.env.BING_API_KEY });
 // Define your output schema
 const outputSchema = z.object({
   summary: z.string(),
-  findings: z.array(z.object({
-    topic: z.string(),
-    details: z.string(),
-    confidence: z.number()
-  })),
-  sources: z.array(z.string().url())
+  findings: z.array(
+    z.object({
+      topic: z.string(),
+      details: z.string(),
+      confidence: z.number(),
+    })
+  ),
+  sources: z.array(z.string().url()),
 });
 
 // Execute parallel research tracks
 const results = await research({
-  query: "Quantum computing applications in healthcare",
+  query: 'Quantum computing applications in healthcare',
   outputSchema,
   steps: [
     parallel({
@@ -257,40 +276,40 @@ const results = await research({
         track({
           name: 'academic',
           steps: [
-            searchWeb({ 
-              provider: googleSearch, 
-              query: "quantum computing healthcare scholarly articles" 
-            }),
-            extractContent(),
-            analyze({ 
-              llm: openai('gpt-4o'),
-              focus: 'academic-research'
-            })
-          ]
-        }),
-        track({
-          name: 'commercial',
-          steps: [
-            searchWeb({ 
-              provider: bingSearch, 
-              query: "quantum computing healthcare startups companies" 
+            searchWeb({
+              provider: googleSearch,
+              query: 'quantum computing healthcare scholarly articles',
             }),
             extractContent(),
             analyze({
               llm: openai('gpt-4o'),
-              focus: 'commercial-applications'
-            })
-          ]
-        })
+              focus: 'academic-research',
+            }),
+          ],
+        }),
+        track({
+          name: 'commercial',
+          steps: [
+            searchWeb({
+              provider: bingSearch,
+              query: 'quantum computing healthcare startups companies',
+            }),
+            extractContent(),
+            analyze({
+              llm: openai('gpt-4o'),
+              focus: 'commercial-applications',
+            }),
+          ],
+        }),
       ],
       mergeFunction: ResultMerger.createMergeFunction({
         strategy: 'weighted',
         weights: { academic: 1.5, commercial: 1.0 },
-        conflictResolution: 'mostConfident'
-      })
+        conflictResolution: 'mostConfident',
+      }),
     }),
-    summarize({ maxLength: 1000 })
-  ]
+    summarize({ maxLength: 1000 }),
+  ],
 });
 ```
 
@@ -299,12 +318,12 @@ const results = await research({
 Use AI agents to dynamically decide which research steps to execute:
 
 ```typescript
-import { 
-  research, 
-  orchestrate, 
-  searchWeb, 
-  extractContent, 
-  analyze 
+import {
+  research,
+  orchestrate,
+  searchWeb,
+  extractContent,
+  analyze,
 } from '@plust/datasleuth';
 import { z } from 'zod';
 import { google, scholar } from '@plust/search-sdk';
@@ -312,30 +331,36 @@ import { openai } from '@ai-sdk/openai';
 
 // Configure search providers
 const webSearch = google.configure({ apiKey: process.env.GOOGLE_API_KEY });
-const academicSearch = scholar.configure({ apiKey: process.env.SCHOLAR_API_KEY });
+const academicSearch = scholar.configure({
+  apiKey: process.env.SCHOLAR_API_KEY,
+});
 
 // Execute research with orchestration
 const results = await research({
-  query: "Emerging technologies in renewable energy storage",
+  query: 'Emerging technologies in renewable energy storage',
   outputSchema: z.object({
     marketOverview: z.string(),
-    technologies: z.array(z.object({
-      name: z.string(),
-      maturityLevel: z.enum(['research', 'emerging', 'growth', 'mature']),
-      costEfficiency: z.number().min(1).max(10),
-      scalabilityPotential: z.number().min(1).max(10),
-      keyPlayers: z.array(z.string())
-    })),
+    technologies: z.array(
+      z.object({
+        name: z.string(),
+        maturityLevel: z.enum(['research', 'emerging', 'growth', 'mature']),
+        costEfficiency: z.number().min(1).max(10),
+        scalabilityPotential: z.number().min(1).max(10),
+        keyPlayers: z.array(z.string()),
+      })
+    ),
     forecast: z.object({
       shortTerm: z.string(),
       mediumTerm: z.string(),
-      longTerm: z.string()
+      longTerm: z.string(),
     }),
-    sources: z.array(z.object({
-      url: z.string().url(),
-      type: z.enum(['academic', 'news', 'company', 'government']),
-      relevance: z.number().min(0).max(1)
-    }))
+    sources: z.array(
+      z.object({
+        url: z.string().url(),
+        type: z.enum(['academic', 'news', 'company', 'government']),
+        relevance: z.number().min(0).max(1),
+      })
+    ),
   }),
   steps: [
     orchestrate({
@@ -344,7 +369,7 @@ const results = await research({
         searchWeb: searchWeb({ provider: webSearch }),
         searchAcademic: searchWeb({ provider: academicSearch }),
         extractContent: extractContent(),
-        analyze: analyze()
+        analyze: analyze(),
         // Add your custom tools here
       },
       customPrompt: `
@@ -352,17 +377,18 @@ const results = await research({
         Your goal is to build a comprehensive market overview with technical assessment.
       `,
       maxIterations: 15,
-      exitCriteria: (state) => 
-        state.metadata.confidenceScore > 0.85 && 
-        state.data.dataPoints?.length > 20
-    })
-  ]
+      exitCriteria: (state) =>
+        state.metadata.confidenceScore > 0.85 &&
+        state.data.dataPoints?.length > 20,
+    }),
+  ],
 });
 ```
 
 ## API Reference
 
-For complete API documentation, see the [API Documentation](./docs/api/index.html).
+For complete API documentation, see the
+[API Documentation](./docs/api/index.html).
 
 ### Core Functions
 
@@ -546,7 +572,8 @@ ResultMerger.createMergeFunction({
 
 @plust/datasleuth provides detailed error types for different failure scenarios:
 
-- `ConfigurationError`: Invalid configuration (missing required parameters, etc.)
+- `ConfigurationError`: Invalid configuration (missing required parameters,
+  etc.)
 - `ValidationError`: Output doesn't match the provided schema
 - `LLMError`: Error communicating with language model
 - `SearchError`: Error executing web searches
@@ -555,6 +582,7 @@ ResultMerger.createMergeFunction({
 - `PipelineError`: Error in pipeline execution
 
 Each error includes:
+
 - Descriptive message
 - Detailed error information
 - Suggestions for resolving the issue
@@ -567,8 +595,10 @@ import { z } from 'zod';
 
 try {
   const results = await research({
-    query: "Quantum computing applications",
-    outputSchema: z.object({/*...*/})
+    query: 'Quantum computing applications',
+    outputSchema: z.object({
+      /*...*/
+    }),
   });
 } catch (error) {
   if (error instanceof BaseResearchError) {
@@ -583,11 +613,13 @@ try {
 
 ## Troubleshooting
 
-For detailed troubleshooting information, see the [Troubleshooting Guide](./docs/troubleshooting.md).
+For detailed troubleshooting information, see the
+[Troubleshooting Guide](./docs/troubleshooting.md).
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details on
+how to contribute.
 
 ## License
 
@@ -595,10 +627,17 @@ MIT License - see LICENSE file for details.
 
 ## LLM Integration with Vercel AI SDK
 
-@plust/datasleuth seamlessly integrates with the Vercel AI SDK, allowing you to use any supported LLM as a drop-in component:
+@plust/datasleuth seamlessly integrates with the Vercel AI SDK, allowing you to
+use any supported LLM as a drop-in component:
 
 ```typescript
-import { research, plan, analyze, factCheck, summarize } from '@plust/datasleuth';
+import {
+  research,
+  plan,
+  analyze,
+  factCheck,
+  summarize,
+} from '@plust/datasleuth';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
@@ -607,50 +646,53 @@ import { anthropic } from '@ai-sdk/anthropic';
 const outputSchema = z.object({
   summary: z.string(),
   analysis: z.object({
-    insights: z.array(z.string())
+    insights: z.array(z.string()),
   }),
-  factChecks: z.array(z.object({
-    statement: z.string(),
-    isValid: z.boolean()
-  }))
+  factChecks: z.array(
+    z.object({
+      statement: z.string(),
+      isValid: z.boolean(),
+    })
+  ),
 });
 
 // Use different LLM providers for different steps
 const results = await research({
-  query: "Advancements in gene editing technologies",
+  query: 'Advancements in gene editing technologies',
   outputSchema,
   steps: [
     // Use OpenAI for research planning
-    plan({ 
+    plan({
       llm: openai('gpt-4o'),
-      temperature: 0.4
+      temperature: 0.4,
     }),
-    
+
     // Use Anthropic for specialized analysis
     analyze({
       llm: anthropic('claude-3-opus-20240229'),
       focus: 'ethical-considerations',
-      depth: 'comprehensive'
+      depth: 'comprehensive',
     }),
-    
+
     // Use OpenAI for fact checking
     factCheck({
       llm: openai('gpt-4o'),
       threshold: 0.8,
-      includeEvidence: true
+      includeEvidence: true,
     }),
-    
+
     // Use Anthropic for final summarization
     summarize({
       llm: anthropic('claude-3-sonnet-20240229'),
       format: 'structured',
-      maxLength: 2000
-    })
-  ]
+      maxLength: 2000,
+    }),
+  ],
 });
 ```
 
 You can use any model provider supported by the Vercel AI SDK, including:
+
 - OpenAI (`openai`)
 - Anthropic (`anthropic`)
 - Google (`google`)
@@ -660,14 +702,15 @@ You can use any model provider supported by the Vercel AI SDK, including:
 
 ## Orchestration
 
-For more complex research needs, use the orchestration feature to dynamically decide which tools to use:
+For more complex research needs, use the orchestration feature to dynamically
+decide which tools to use:
 
 ```typescript
-import { 
-  research, 
-  orchestrate, 
-  searchWeb, 
-  extractContent 
+import {
+  research,
+  orchestrate,
+  searchWeb,
+  extractContent,
 } from '@plust/datasleuth';
 import { z } from 'zod';
 import { google, scholar } from '@plust/search-sdk';
@@ -675,30 +718,36 @@ import { openai } from 'ai';
 
 // Configure search providers
 const webSearch = google.configure({ apiKey: process.env.GOOGLE_API_KEY });
-const academicSearch = scholar.configure({ apiKey: process.env.SCHOLAR_API_KEY });
+const academicSearch = scholar.configure({
+  apiKey: process.env.SCHOLAR_API_KEY,
+});
 
 // Execute research with orchestration
 const results = await research({
-  query: "Emerging technologies in renewable energy storage",
+  query: 'Emerging technologies in renewable energy storage',
   outputSchema: z.object({
     marketOverview: z.string(),
-    technologies: z.array(z.object({
-      name: z.string(),
-      maturityLevel: z.enum(['research', 'emerging', 'growth', 'mature']),
-      costEfficiency: z.number().min(1).max(10),
-      scalabilityPotential: z.number().min(1).max(10),
-      keyPlayers: z.array(z.string())
-    })),
+    technologies: z.array(
+      z.object({
+        name: z.string(),
+        maturityLevel: z.enum(['research', 'emerging', 'growth', 'mature']),
+        costEfficiency: z.number().min(1).max(10),
+        scalabilityPotential: z.number().min(1).max(10),
+        keyPlayers: z.array(z.string()),
+      })
+    ),
     forecast: z.object({
       shortTerm: z.string(),
       mediumTerm: z.string(),
-      longTerm: z.string()
+      longTerm: z.string(),
     }),
-    sources: z.array(z.object({
-      url: z.string().url(),
-      type: z.enum(['academic', 'news', 'company', 'government']),
-      relevance: z.number().min(0).max(1)
-    }))
+    sources: z.array(
+      z.object({
+        url: z.string().url(),
+        type: z.enum(['academic', 'news', 'company', 'government']),
+        relevance: z.number().min(0).max(1),
+      })
+    ),
   }),
   steps: [
     orchestrate({
@@ -714,10 +763,10 @@ const results = await research({
         Your goal is to build a comprehensive market overview with technical assessment.
       `,
       maxIterations: 15,
-      exitCriteria: (state) => 
-        state.confidenceScore > 0.85 && state.dataPoints.length > 20
-    })
-  ]
+      exitCriteria: (state) =>
+        state.confidenceScore > 0.85 && state.dataPoints.length > 20,
+    }),
+  ],
 });
 ```
 
@@ -824,7 +873,8 @@ orchestrate({
 
 ## Examples
 
-Check out the examples directory for complete examples of different research scenarios:
+Check out the examples directory for complete examples of different research
+scenarios:
 
 - `examples/basic-research.ts` - Basic research with default pipeline
 - `examples/advanced-research.ts` - Advanced research with custom pipeline

@@ -14,16 +14,16 @@ import {
   PipelineConfig,
   StepExecutionRecord,
   ResearchResult,
-} from '../types/pipeline';
+} from '../types/pipeline.js';
 import { z } from 'zod';
-import { logger, createStepLogger } from '../utils/logging';
-import { executeWithRetry } from '../utils/retry';
+import { logger, createStepLogger } from '../utils/logging.js';
+import { executeWithRetry } from '../utils/retry.js';
 import {
   BaseResearchError,
   PipelineError,
   ConfigurationError,
   isResearchError,
-} from '../types/errors';
+} from '../types/errors.js';
 
 /**
  * Default pipeline configuration
