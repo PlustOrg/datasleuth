@@ -1,6 +1,6 @@
 {
   "name": "@plust/datasleuth",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Build LLM-powered research pipelines and output structured data.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,8 +8,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CHANGELOG.md"
+    "LICENSE"
   ],
   "directories": {
     "doc": "docs",
@@ -29,15 +28,6 @@
     "test:console": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --json --outputFile=coverage-output.json",
-    "example:basic": "ts-node examples/basic-research.ts",
-    "example:advanced": "ts-node examples/advanced-research.ts",
-    "example:orchestration": "ts-node examples/orchestration-research.ts",
-    "example:comprehensive": "ts-node examples/comprehensive-research.ts",
-    "example:parallel": "ts-node examples/parallel-research.ts",
-    "example:classification": "ts-node examples/classification-research.ts",
-    "example:llm-integration": "ts-node examples/llm-integration-research.ts",
-    "example:error-handling": "ts-node examples/error-handling.ts",
-    "example:all": "npm run example:basic && npm run example:advanced && npm run example:orchestration && npm run example:comprehensive && npm run example:parallel && npm run example:classification && npm run example:llm-integration && npm run example:error-handling",
     "docs": "typedoc --entryPointStrategy expand --out docs/api src/index.ts",
     "docs:watch": "typedoc --entryPointStrategy expand --out docs/api --watch src/index.ts",
     "docs:publish": "npm run docs && node scripts/publish-docs.js",
