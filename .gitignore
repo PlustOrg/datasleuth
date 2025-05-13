@@ -58,3 +58,6 @@ Thumbs.db
 
 # Git history maintenance
 .git-backup/
+
+# Local development only
+docs/development-plan.md
